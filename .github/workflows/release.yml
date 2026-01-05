@@ -1,0 +1,237 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.1.0)"
+        required: true
+        type: string
+
+env:
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version format
+        run: |
+          if ! npx semver "$VERSION"; then
+            echo "Error: Invalid semver version: $VERSION"
+            exit 1
+          fi
+
+      - name: Check tag doesn't exist
+        run: |
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Error: Tag v$VERSION already exists"
+            exit 1
+          fi
+
+      - name: Check on main branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Error: Releases must be from main branch"
+            exit 1
+          fi
+
+  build:
+    needs: validate
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: bun-darwin-arm64
+            name: lmv-darwin-arm64
+          - os: macos-13
+            target: bun-darwin-x64
+            name: lmv-darwin-x64
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            name: lmv-linux-x64
+          - os: ubuntu-latest
+            target: bun-linux-arm64
+            name: lmv-linux-arm64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build binary
+        run: |
+          mkdir -p dist
+          bun build src/cli.ts --compile --target=${{ matrix.target }} --outfile=dist/${{ matrix.name }}
+
+      - name: Create archive
+        run: |
+          cd dist
+          tar -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
+          shasum -a 256 ${{ matrix.name }}.tar.gz > ${{ matrix.name }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}.tar.gz
+            dist/${{ matrix.name }}.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Create combined checksums
+        run: |
+          cd release
+          cat *.sha256 > checksums.txt
+
+      - name: Update version in package.json
+        run: |
+          sed -i 's/"version": "[^"]*"/"version": "${{ env.VERSION }}"/' package.json
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "release: v$VERSION" || true
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: release/*
+          generate_release_notes: true
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for release assets
+        run: sleep 10
+
+      - name: Get Darwin ARM64 SHA256
+        id: sha-darwin-arm64
+        run: |
+          sha=$(curl -sL "https://github.com/dmmulroy/lmv/releases/download/v$VERSION/lmv-darwin-arm64.tar.gz.sha256" | cut -d' ' -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Get Darwin x64 SHA256
+        id: sha-darwin-x64
+        run: |
+          sha=$(curl -sL "https://github.com/dmmulroy/lmv/releases/download/v$VERSION/lmv-darwin-x64.tar.gz.sha256" | cut -d' ' -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Get Linux x64 SHA256
+        id: sha-linux-x64
+        run: |
+          sha=$(curl -sL "https://github.com/dmmulroy/lmv/releases/download/v$VERSION/lmv-linux-x64.tar.gz.sha256" | cut -d' ' -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Get Linux ARM64 SHA256
+        id: sha-linux-arm64
+        run: |
+          sha=$(curl -sL "https://github.com/dmmulroy/lmv/releases/download/v$VERSION/lmv-linux-arm64.tar.gz.sha256" | cut -d' ' -f1)
+          echo "sha=$sha" >> $GITHUB_OUTPUT
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: dmmulroy/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          cat > homebrew-tap/Formula/lmv.rb << 'EOF'
+          class Lmv < Formula
+            desc "Local Markdown Viewer - view and edit markdown files in your browser"
+            homepage "https://github.com/dmmulroy/lmv"
+            version "${{ env.VERSION }}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/dmmulroy/lmv/releases/download/v${{ env.VERSION }}/lmv-darwin-arm64.tar.gz"
+                sha256 "${{ steps.sha-darwin-arm64.outputs.sha }}"
+              else
+                url "https://github.com/dmmulroy/lmv/releases/download/v${{ env.VERSION }}/lmv-darwin-x64.tar.gz"
+                sha256 "${{ steps.sha-darwin-x64.outputs.sha }}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/dmmulroy/lmv/releases/download/v${{ env.VERSION }}/lmv-linux-arm64.tar.gz"
+                sha256 "${{ steps.sha-linux-arm64.outputs.sha }}"
+              else
+                url "https://github.com/dmmulroy/lmv/releases/download/v${{ env.VERSION }}/lmv-linux-x64.tar.gz"
+                sha256 "${{ steps.sha-linux-x64.outputs.sha }}"
+              end
+            end
+
+            def install
+              if OS.mac?
+                if Hardware::CPU.arm?
+                  bin.install "lmv-darwin-arm64" => "lmv"
+                else
+                  bin.install "lmv-darwin-x64" => "lmv"
+                end
+              elsif OS.linux?
+                if Hardware::CPU.arm?
+                  bin.install "lmv-linux-arm64" => "lmv"
+                else
+                  bin.install "lmv-linux-x64" => "lmv"
+                end
+              end
+            end
+
+            test do
+              assert_match "lmv", shell_output("#{bin}/lmv --help")
+            end
+          end
+          EOF
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+          commit-message: "lmv: update to v${{ env.VERSION }}"
+          title: "lmv: update to v${{ env.VERSION }}"
+          body: |
+            Automated update for lmv v${{ env.VERSION }}
+            
+            Release: https://github.com/dmmulroy/lmv/releases/tag/v${{ env.VERSION }}
+          branch: lmv-v${{ env.VERSION }}
+          base: main

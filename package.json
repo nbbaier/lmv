@@ -1,14 +1,16 @@
 {
-  "name": "local-markdown-viewer",
-  "version": "1.0.0",
-  "description": "Local markdown viewer with live editing",
+  "name": "lmv",
+  "version": "0.1.0",
+  "description": "Local Markdown Viewer - view and edit markdown files in your browser",
   "module": "src/cli.ts",
   "type": "module",
   "bin": {
     "lmv": "./src/cli.ts"
   },
   "scripts": {
-    "dev": "bun run src/cli.ts"
+    "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --compile --outfile dist/lmv",
+    "build:all": "bun run scripts/build.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -31,5 +33,11 @@
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.4.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dmmulroy/lmv.git"
+  },
+  "license": "MIT",
+  "author": "Dillon Mulroy"
 }
