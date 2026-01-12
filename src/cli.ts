@@ -4,6 +4,8 @@ import { startServer } from "./server";
 
 const args = process.argv.slice(2);
 
+const DEFAULT_PORT = 3000;
+
 function printHelp() {
   console.log(`
 lmv - Local Markdown Viewer
@@ -13,7 +15,7 @@ Usage:
   lmv <file.md> -p 8080   Use custom port
 
 Options:
-  -p, --port <number>     Port to run server on (default: 3000)
+  -p, --port <number>     Port to run server on (default: ${DEFAULT_PORT})
   -h, --help              Show this help message
   --no-open               Don't auto-open browser
 
@@ -27,6 +29,26 @@ Examples:
 `);
 }
 
+async function isServerRunning(port: number): Promise<boolean> {
+  try {
+    const res = await fetch(`http://localhost:${port}/health`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+function openBrowser(url: string) {
+  const opener =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+
+  Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });
+}
+
 async function main() {
   if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
     printHelp();
@@ -35,7 +57,7 @@ async function main() {
 
   // Parse arguments
   let filePath: string | undefined;
-  let port = 3000;
+  let port = DEFAULT_PORT;
   let autoOpen = true;
 
   for (let i = 0; i < args.length; i++) {
@@ -74,27 +96,33 @@ async function main() {
     process.exit(1);
   }
 
-  // Start server
-  const server = startServer(absolutePath, port);
-  const url = `http://localhost:${server.port}`;
+  const fileUrl = `http://localhost:${port}?file=${encodeURIComponent(absolutePath)}`;
+  const serverRunning = await isServerRunning(port);
 
+  if (serverRunning) {
+    console.log(`
+  Viewing: ${absolutePath}
+  Server:  http://localhost:${port} (already running)
+`);
+
+    if (autoOpen) {
+      openBrowser(fileUrl);
+    }
+    return;
+  }
+
+  // Start server
+  const server = startServer(port);
   console.log(`
   Viewing: ${absolutePath}
-  Server:  ${url}
+  Server:  http://localhost:${server.port}
 
   Press Ctrl+C to stop
 `);
 
   // Open browser
   if (autoOpen) {
-    const opener =
-      process.platform === "darwin"
-        ? "open"
-        : process.platform === "win32"
-        ? "start"
-        : "xdg-open";
-
-    Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });
+    openBrowser(fileUrl);
   }
 }
 

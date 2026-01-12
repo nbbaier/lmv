@@ -1,4 +1,4 @@
-import { resolve, basename } from "path";
+import { resolve, basename, extname } from "path";
 import index from "./index.html";
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -8,20 +8,45 @@ interface GistResponse {
   id: string;
 }
 
-export function startServer(filePath: string, port: number = 3000) {
+type FileValidation = { path: string; filename: string } | { error: string };
+
+function validateFilePath(filePath: string | null): FileValidation {
+  if (!filePath) {
+    return { error: "No file specified" };
+  }
+
   const absolutePath = resolve(filePath);
-  const filename = basename(absolutePath);
+  const ext = extname(absolutePath).toLowerCase();
 
-  // Validate file exists and is markdown
-  const file = Bun.file(absolutePath);
+  if (ext !== ".md" && ext !== ".markdown") {
+    return { error: "Only .md and .markdown files are supported" };
+  }
 
+  return { path: absolutePath, filename: basename(absolutePath) };
+}
+
+function getFileParam(req: Request): string | null {
+  const url = new URL(req.url);
+  return url.searchParams.get("file");
+}
+
+export function startServer(port: number = 3000) {
   const server = Bun.serve({
     port,
     routes: {
       "/": index,
+      "/health": {
+        GET: () => Response.json({ ok: true }),
+      },
       "/api/file": {
-        GET: async () => {
+        GET: async (req) => {
+          const validation = validateFilePath(getFileParam(req));
+          if ("error" in validation) {
+            return Response.json({ error: validation.error }, { status: 400 });
+          }
+
           try {
+            const file = Bun.file(validation.path);
             const exists = await file.exists();
             if (!exists) {
               return Response.json(
@@ -30,7 +55,7 @@ export function startServer(filePath: string, port: number = 3000) {
               );
             }
             const content = await file.text();
-            return Response.json({ content, filename });
+            return Response.json({ content, filename: validation.filename });
           } catch (error) {
             return Response.json(
               { error: "Failed to read file" },
@@ -39,8 +64,13 @@ export function startServer(filePath: string, port: number = 3000) {
           }
         },
         PUT: async (req) => {
+          const validation = validateFilePath(getFileParam(req));
+          if ("error" in validation) {
+            return Response.json({ error: validation.error }, { status: 400 });
+          }
+
           try {
-            const body = await req.json();
+            const body = (await req.json()) as { content?: unknown };
             const content = body.content;
             if (typeof content !== "string") {
               return Response.json(
@@ -48,7 +78,7 @@ export function startServer(filePath: string, port: number = 3000) {
                 { status: 400 }
               );
             }
-            await Bun.write(absolutePath, content);
+            await Bun.write(validation.path, content);
             return Response.json({ success: true });
           } catch (error) {
             return Response.json(
@@ -71,14 +101,25 @@ export function startServer(filePath: string, port: number = 3000) {
           }
 
           try {
-            const body = await req.json();
-            const content = body.content as string;
-            const name = body.filename as string;
+            const body = (await req.json()) as {
+              content?: unknown;
+              filename?: unknown;
+              public?: unknown;
+            };
+            const content = body.content;
+            const name = body.filename;
             const isPublic = body.public !== false;
 
             if (typeof content !== "string" || !content.trim()) {
               return Response.json(
                 { error: "Content is required" },
+                { status: 400 }
+              );
+            }
+
+            if (typeof name !== "string" || !name.trim()) {
+              return Response.json(
+                { error: "Filename is required" },
                 { status: 400 }
               );
             }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -138,10 +138,19 @@ function useTheme() {
   return { theme, setTheme };
 }
 
+function useFileParam(): string | null {
+  return useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("file");
+  }, []);
+}
+
 export function App() {
+  const fileParam = useFileParam();
   const [content, setContent] = useState("");
   const [editedContent, setEditedContent] = useState("");
   const [filename, setFilename] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -151,15 +160,28 @@ export function App() {
   const { theme, setTheme } = useTheme();
   const { toasts, addToast, removeToast } = useToast();
 
+  const apiUrl = fileParam ? `/api/file?file=${encodeURIComponent(fileParam)}` : null;
+
   useEffect(() => {
-    fetch("/api/file")
-      .then((res) => res.json())
-      .then((data: { content: string; filename: string }) => {
-        setContent(data.content);
-        setEditedContent(data.content);
-        setFilename(data.filename);
+    if (!apiUrl) {
+      setError("No file specified. Use: lmv <file.md>");
+      return;
+    }
+
+    fetch(apiUrl)
+      .then(async (res) => {
+        const data = (await res.json()) as { content?: string; filename?: string; error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Failed to load file");
+          return;
+        }
+        if (typeof data.content === "string" && typeof data.filename === "string") {
+          setContent(data.content);
+          setEditedContent(data.content);
+          setFilename(data.filename);
+        }
       })
-      .catch(console.error);
+      .catch(() => setError("Failed to load file"));
 
     fetch("/api/share")
       .then((res) => res.json())
@@ -167,16 +189,17 @@ export function App() {
         setShareConfigured(data.configured);
       })
       .catch(console.error);
-  }, []);
+  }, [apiUrl]);
 
   useEffect(() => {
     setHasChanges(editedContent !== content);
   }, [editedContent, content]);
 
   const handleSave = useCallback(async () => {
+    if (!apiUrl) return;
     setIsSaving(true);
     try {
-      const res = await fetch("/api/file", {
+      const res = await fetch(apiUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: editedContent }),
@@ -186,12 +209,12 @@ export function App() {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 2000);
       }
-    } catch (error) {
-      console.error("Failed to save:", error);
+    } catch (err) {
+      console.error("Failed to save:", err);
     } finally {
       setIsSaving(false);
     }
-  }, [editedContent]);
+  }, [apiUrl, editedContent]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -267,6 +290,20 @@ export function App() {
   }, [shareConfigured, isEditing, editedContent, content, filename, addToast]);
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <FileText className="h-12 w-12 text-muted-foreground mx-auto" />
+          <h1 className="text-xl font-medium text-foreground">{error}</h1>
+          <p className="text-sm text-muted-foreground">
+            Run <code className="bg-muted px-1.5 py-0.5 rounded">lmv &lt;file.md&gt;</code> to view a file
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={300}>
