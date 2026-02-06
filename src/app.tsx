@@ -827,9 +827,11 @@ export function App() {
 													{children}
 												</blockquote>
 											),
-											code: ({ className, children, ...props }) => {
-												const isInline = !className;
-												if (isInline) {
+											code: ({ className, children, node, ...props }) => {
+												const isBlock =
+													node?.position &&
+													node.position.start.line !== node.position.end.line;
+												if (!isBlock) {
 													return (
 														<code
 															className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
