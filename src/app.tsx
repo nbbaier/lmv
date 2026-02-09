@@ -15,11 +15,12 @@ import {
 	TimerOff,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { Button } from "./components/button";
+import { FrontmatterDisplay } from "./components/frontmatter";
 import { Sidebar, scrollNodeIntoView } from "./components/sidebar";
 import { Toggle } from "./components/toggle";
 import {
@@ -29,6 +30,7 @@ import {
 	TooltipTrigger,
 } from "./components/tooltip";
 import type { ApiFile, SortOrder } from "./lib/file-tree";
+import { parseFrontmatter } from "./lib/frontmatter";
 import { cn } from "./lib/utils";
 
 type Theme = "light" | "dark" | "system";
@@ -518,6 +520,8 @@ export function App() {
 		[selectedPath, hasChanges, handleSave, isMobile],
 	);
 
+	const parsed = useMemo(() => parseFrontmatter(content), [content]);
+
 	const breadcrumbs = selectedPath
 		? selectedPath.split("/").filter(Boolean)
 		: [];
@@ -774,6 +778,11 @@ export function App() {
 								</div>
 							) : (
 								<article className="prose prose-neutral dark:prose-invert max-w-none">
+									{parsed.frontmatter && (
+										<FrontmatterDisplay
+											frontmatter={parsed.frontmatter}
+										/>
+									)}
 									<ReactMarkdown
 										remarkPlugins={[remarkGfm]}
 										rehypePlugins={[rehypeHighlight]}
@@ -892,7 +901,7 @@ export function App() {
 											),
 										}}
 									>
-										{content}
+										{parsed.body}
 									</ReactMarkdown>
 								</article>
 							)}
