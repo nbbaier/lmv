@@ -1,43 +1,43 @@
 {
-  "name": "lmv",
-  "version": "0.2.0",
-  "description": "Local Markdown Viewer - view and edit markdown files in your browser",
-  "module": "src/cli.ts",
-  "type": "module",
-  "bin": {
-    "lmv": "./src/cli.ts"
-  },
-  "scripts": {
-    "dev": "bun run src/cli.ts",
-    "build": "bun build src/cli.ts --compile --outfile dist/lmv",
-    "build:all": "bun run scripts/build.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "tailwindcss": "^4.1.18"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "@radix-ui/react-toggle": "^1.1.10",
-    "@radix-ui/react-tooltip": "^1.2.8",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.562.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.4.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/dmmulroy/lmv.git"
-  },
-  "license": "MIT",
-  "author": "Dillon Mulroy"
+	"name": "lmv",
+	"version": "0.2.0",
+	"description": "Local Markdown Viewer - view and edit markdown files in your browser",
+	"module": "src/cli.ts",
+	"type": "module",
+	"bin": {
+		"lmv": "./src/cli.ts"
+	},
+	"scripts": {
+		"dev": "bun run src/cli.ts",
+		"build": "bun build src/cli.ts --compile --outfile dist/lmv",
+		"build:all": "bun run scripts/build.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/react": "^19.2.7",
+		"@types/react-dom": "^19.2.3",
+		"tailwindcss": "^4.1.18"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@radix-ui/react-toggle": "^1.1.10",
+		"@radix-ui/react-tooltip": "^1.2.8",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"lucide-react": "^0.562.0",
+		"react": "^19.2.3",
+		"react-dom": "^19.2.3",
+		"react-markdown": "^10.1.0",
+		"rehype-highlight": "^7.0.2",
+		"remark-gfm": "^4.0.1",
+		"tailwind-merge": "^3.4.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/dmmulroy/lmv.git"
+	},
+	"license": "MIT",
+	"author": "Dillon Mulroy"
 }

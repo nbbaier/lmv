@@ -1,44 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Local Markdown Viewer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
-    <script>
+
+<head>
+   <meta charset="UTF-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+   <title>Local Markdown Viewer</title>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+   <script>
       tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              border: 'hsl(var(--border))',
-              input: 'hsl(var(--input))',
-              ring: 'hsl(var(--ring))',
-              background: 'hsl(var(--background))',
-              foreground: 'hsl(var(--foreground))',
-              primary: {
-                DEFAULT: 'hsl(var(--primary))',
-                foreground: 'hsl(var(--primary-foreground))',
-              },
-              secondary: {
-                DEFAULT: 'hsl(var(--secondary))',
-                foreground: 'hsl(var(--secondary-foreground))',
-              },
-              muted: {
-                DEFAULT: 'hsl(var(--muted))',
-                foreground: 'hsl(var(--muted-foreground))',
-              },
-              accent: {
-                DEFAULT: 'hsl(var(--accent))',
-                foreground: 'hsl(var(--accent-foreground))',
-              },
+         darkMode: 'class',
+         theme: {
+            extend: {
+               colors: {
+                  border: 'hsl(var(--border))',
+                  input: 'hsl(var(--input))',
+                  ring: 'hsl(var(--ring))',
+                  background: 'hsl(var(--background))',
+                  foreground: 'hsl(var(--foreground))',
+                  primary: {
+                     DEFAULT: 'hsl(var(--primary))',
+                     foreground: 'hsl(var(--primary-foreground))',
+                  },
+                  secondary: {
+                     DEFAULT: 'hsl(var(--secondary))',
+                     foreground: 'hsl(var(--secondary-foreground))',
+                  },
+                  muted: {
+                     DEFAULT: 'hsl(var(--muted))',
+                     foreground: 'hsl(var(--muted-foreground))',
+                  },
+                  accent: {
+                     DEFAULT: 'hsl(var(--accent))',
+                     foreground: 'hsl(var(--accent-foreground))',
+                  },
+               },
             },
-          },
-        },
+         },
       }
-    </script>
-    <style type="text/tailwindcss">
+   </script>
+   <style type="text/tailwindcss">
       @layer base {
         :root {
           --background: 0 0% 100%;
@@ -74,21 +76,23 @@
         body { @apply bg-background text-foreground antialiased; }
       }
     </style>
-    <script>
-      (function() {
-        const theme = localStorage.getItem('lmv-theme') || 'system';
-        const root = document.documentElement;
-        if (theme === 'system') {
-          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          root.classList.add(dark ? 'dark' : 'light');
-        } else {
-          root.classList.add(theme);
-        }
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="./main.tsx"></script>
-  </body>
+   <script>
+         (() => {
+            const theme = localStorage.getItem('lmv-theme') || 'system';
+            const root = document.documentElement;
+            if (theme === 'system') {
+               const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+               root.classList.add(dark ? 'dark' : 'light');
+            } else {
+               root.classList.add(theme);
+            }
+         })();
+   </script>
+</head>
+
+<body>
+   <div id="root"></div>
+   <script type="module" src="./main.tsx"></script>
+</body>
+
 </html>
