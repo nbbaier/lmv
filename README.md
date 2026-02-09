@@ -1,16 +1,7 @@
 # lmv - Local Markdown Viewer
 
 View and edit markdown files in your browser with syntax highlighting, dark mode, and GitHub Gist sharing.
-https://x.com/jainarvind/status/2019553277571190821?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/kevinrose/status/2019640020240593072?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/magi_jay/status/2019495798543724917?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/nathanflurry/status/2019528889643725176?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/nicopreme/status/2019647662174150816?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/pn46pn46/status/2019510427592601830?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/samuelcolvin/status/2019604402399768721?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/shuding/status/2019702844635689342?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/sirajahashmi/status/2019568390239842721?s=12&t=6MtvRH_rRZ9z3iep_OO15A
-https://x.com/strike_dr/status/2019428354009731202?s=12&t=6MtvRH_rRZ9z3iep_OO15A
+
 ## Installation
 
 ### Homebrew (macOS/Linux)
