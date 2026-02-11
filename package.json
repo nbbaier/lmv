@@ -10,7 +10,8 @@
 	"scripts": {
 		"dev": "bun run src/cli.ts",
 		"build": "bun build src/cli.ts --compile --outfile dist/lmv",
-		"build:all": "bun run scripts/build.ts"
+		"build:all": "bun run scripts/build.ts",
+		"build:cp": "bun run build && cp dist/lmv /Users/nbbaier/.local/bin/"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",

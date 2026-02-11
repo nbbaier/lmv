@@ -190,6 +190,10 @@ export function App() {
 
 	const selectedPathRef = useRef<string | null>(null);
 	const hasChangesRef = useRef(false);
+	const lastSaveRef = useRef<{
+		path: string;
+		manual: boolean;
+	} | null>(null);
 
 	useEffect(() => {
 		selectedPathRef.current = selectedPath;
@@ -383,13 +387,17 @@ export function App() {
 			} else {
 				const p = selectedPathRef.current;
 				if (!p) return;
+				const lastSave = lastSaveRef.current;
+				const fromOurSave = lastSave?.path === p;
 				fetch(`/api/file?path=${encodeURIComponent(p)}`)
 					.then((res) => res.json())
 					.then((d: { content: string; filename: string }) => {
 						setContent(d.content);
 						setEditedContent(d.content);
 						setFilename(d.filename);
-						addToast({ type: "info", message: "File updated on disk" });
+						if (!fromOurSave || lastSave?.manual) {
+							addToast({ type: "info", message: "File updated on disk" });
+						}
 					})
 					.catch(() => {});
 			}
@@ -404,34 +412,41 @@ export function App() {
 		setHasChanges(editedContent !== content);
 	}, [editedContent, content]);
 
-	const handleSave = useCallback(async () => {
-		if (!selectedPath) return;
-		setIsSaving(true);
-		try {
-			const res = await fetch(
-				`/api/file?path=${encodeURIComponent(selectedPath)}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ content: editedContent }),
-				},
-			);
-			if (!res.ok) throw new Error("Failed to save file");
+	const handleSave = useCallback(
+		async (manual = true) => {
+			if (!selectedPath) return false;
+			setIsSaving(true);
+			try {
+				const res = await fetch(
+					`/api/file?path=${encodeURIComponent(selectedPath)}`,
+					{
+						method: "PUT",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ content: editedContent }),
+					},
+				);
+				if (!res.ok) throw new Error("Failed to save file");
 
-			setContent(editedContent);
-			setSaveSuccess(true);
-			setTimeout(() => setSaveSuccess(false), 2000);
-			return true;
-		} catch (error) {
-			addToast({
-				type: "error",
-				message: (error as Error).message || "Failed to save file",
-			});
-			return false;
-		} finally {
-			setIsSaving(false);
-		}
-	}, [editedContent, selectedPath, addToast]);
+				setContent(editedContent);
+				setSaveSuccess(true);
+				setTimeout(() => setSaveSuccess(false), 2000);
+				lastSaveRef.current = { path: selectedPath, manual };
+				setTimeout(() => {
+					lastSaveRef.current = null;
+				}, 2000);
+				return true;
+			} catch (error) {
+				addToast({
+					type: "error",
+					message: (error as Error).message || "Failed to save file",
+				});
+				return false;
+			} finally {
+				setIsSaving(false);
+			}
+		},
+		[editedContent, selectedPath, addToast],
+	);
 
 	useEffect(() => {
 		localStorage.setItem("lmv-sidebar-visible", String(sidebarVisible));
@@ -452,10 +467,10 @@ export function App() {
 	useEffect(() => {
 		if (!autosave || !isEditing || !hasChanges || !selectedPath) return;
 		const timer = setTimeout(() => {
-			handleSave();
+			handleSave(false);
 		}, 1000);
 		return () => clearTimeout(timer);
-	}, [autosave, isEditing, hasChanges, selectedPath, editedContent, handleSave]);
+	}, [autosave, isEditing, hasChanges, selectedPath, handleSave]);
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
@@ -579,6 +594,7 @@ export function App() {
 											size="icon"
 											onClick={() => setSidebarVisible((v) => !v)}
 											aria-label="Toggle sidebar"
+											type="button"
 										>
 											<PanelLeft className="h-4 w-4" />
 										</Button>
@@ -603,7 +619,7 @@ export function App() {
 													);
 												}
 												return (
-													<button
+													<Button
 														key={full}
 														type="button"
 														className="text-muted-foreground hover:text-foreground truncate"
@@ -624,7 +640,7 @@ export function App() {
 														<span className="mx-2 text-muted-foreground/60">
 															{">"}
 														</span>
-													</button>
+													</Button>
 												);
 											})}
 										</nav>
@@ -722,7 +738,7 @@ export function App() {
 										<TooltipTrigger asChild>
 											<Button
 												size="sm"
-												onClick={handleSave}
+												onClick={() => handleSave()}
 												disabled={!selectedPath || !hasChanges || isSaving}
 												className={cn(
 													"transition-all",
@@ -814,9 +830,7 @@ export function App() {
 							) : (
 								<article className="prose prose-neutral dark:prose-invert max-w-none">
 									{parsed.frontmatter && (
-										<FrontmatterDisplay
-											frontmatter={parsed.frontmatter}
-										/>
+										<FrontmatterDisplay frontmatter={parsed.frontmatter} />
 									)}
 									<ReactMarkdown
 										remarkPlugins={[remarkGfm]}

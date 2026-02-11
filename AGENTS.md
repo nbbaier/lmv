@@ -1,7 +1,7 @@
 # LMV PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-01-12
-**Commit:** f86a720
+**Commit:** f86a720a
 
 ## OVERVIEW
 
@@ -25,13 +25,13 @@ lmv/
 
 ## WHERE TO LOOK
 
-| Task | Location | Notes |
-|------|----------|-------|
-| CLI args/help | `src/cli.ts` | port, --no-open |
-| API routes | `src/server.ts` | /api/file, /api/share |
-| UI logic | `src/app.tsx` | theme, save, gist sharing |
-| Add component | `src/components/` | cva + Radix pattern |
-| Build binary | `scripts/build.ts` | darwin/linux targets |
+| Task          | Location           | Notes                     |
+| ------------- | ------------------ | ------------------------- |
+| CLI args/help | `src/cli.ts`       | port, --no-open           |
+| API routes    | `src/server.ts`    | /api/file, /api/share     |
+| UI logic      | `src/app.tsx`      | theme, save, gist sharing |
+| Add component | `src/components/`  | cva + Radix pattern       |
+| Build binary  | `scripts/build.ts` | darwin/linux targets      |
 
 ## CONVENTIONS
 
@@ -42,12 +42,12 @@ lmv/
 
 ## ANTI-PATTERNS
 
-| Pattern | Reason |
-|---------|--------|
-| `as Type` assertions | Violates type safety; use runtime validation |
-| Non-null `!` operator | Use null checks or Option pattern |
-| `any` type | Never acceptable |
-| Express/Vite | Use Bun.serve() and HTML imports |
+| Pattern               | Reason                                       |
+| --------------------- | -------------------------------------------- |
+| `as Type` assertions  | Violates type safety; use runtime validation |
+| Non-null `!` operator | Use null checks or Option pattern            |
+| `any` type            | Never acceptable                             |
+| Express/Vite          | Use Bun.serve() and HTML imports             |
 
 ### Known Violations (technical debt)
 
