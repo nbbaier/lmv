@@ -243,6 +243,31 @@ export function App() {
 							if (seg) top.add(seg);
 						}
 						setExpandedFolders(top);
+
+						// Restore last opened document
+						const filePaths = new Set(
+							(data.files || []).map((f: ApiFile) => f.path),
+						);
+						fetch("/api/last-document")
+							.then((res) => res.json())
+							.then((d: { path: string | null }) => {
+								if (d.path && filePaths.has(d.path)) {
+									setSelectedPath(d.path);
+									setCursorPath(d.path);
+									// Expand parent folders so the file is visible
+									const parts = d.path.split("/").filter(Boolean);
+									if (parts.length > 1) {
+										setExpandedFolders((prev) => {
+											const next = new Set(prev);
+											for (let i = 1; i < parts.length; i++) {
+												next.add(parts.slice(0, i).join("/"));
+											}
+											return next;
+										});
+									}
+								}
+							})
+							.catch(() => {});
 					}
 				},
 			)
@@ -282,6 +307,16 @@ export function App() {
 				setFilename(selectedPath.split("/").pop() || selectedPath);
 			});
 	}, [selectedPath, addToast]);
+
+	// Persist last opened document
+	useEffect(() => {
+		if (!selectedPath) return;
+		fetch("/api/last-document", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ path: selectedPath }),
+		}).catch(() => {});
+	}, [selectedPath]);
 
 	const refreshFiles = useCallback(
 		async (refresh: boolean) => {

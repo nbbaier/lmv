@@ -3,6 +3,7 @@ import { lstat, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import index from "./index.html";
 import { discoverMarkdownFiles } from "./lib/file-discovery";
+import { getLastDocument, setLastDocument } from "./lib/state";
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
@@ -369,6 +370,34 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 						console.error("Share error:", error);
 						return Response.json(
 							{ error: "Failed to create gist" },
+							{ status: 500 },
+						);
+					}
+				},
+			},
+			"/api/last-document": {
+				GET: async () => {
+					const path = await getLastDocument(config.cwd);
+					if (path && allowedFiles.has(path)) {
+						return Response.json({ path });
+					}
+					return Response.json({ path: null });
+				},
+				PUT: async (req) => {
+					try {
+						const body = await req.json();
+						const path = body.path;
+						if (typeof path !== "string" || !allowedFiles.has(path)) {
+							return Response.json(
+								{ error: "Invalid path" },
+								{ status: 400 },
+							);
+						}
+						await setLastDocument(config.cwd, path);
+						return Response.json({ success: true });
+					} catch {
+						return Response.json(
+							{ error: "Failed to save last document" },
 							{ status: 500 },
 						);
 					}
