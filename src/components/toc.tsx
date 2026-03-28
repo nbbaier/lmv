@@ -15,7 +15,7 @@ function extractHeadings(markdown: string): Heading[] {
 
 	for (const line of lines) {
 		const match = line.match(/^(#{1,6})\s+(.+)$/);
-		if (match) {
+		if (match && match[1] && match[2]) {
 			const level = match[1].length;
 			const text = match[2].trim();
 			const id = text
