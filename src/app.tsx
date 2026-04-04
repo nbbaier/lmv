@@ -15,6 +15,7 @@ import {
 	TimerOff,
 	X,
 } from "lucide-react";
+import { renderMermaidASCII } from "beautiful-mermaid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -59,6 +60,34 @@ function useToast() {
 	}, []);
 
 	return { toasts, addToast, removeToast };
+}
+
+function MermaidDiagram({ chart }: { chart: string }) {
+	try {
+		const ascii = renderMermaidASCII(chart, {
+			colorMode: "html",
+			theme: {
+				fg: "#c9d1d9",
+				border: "#58a6ff",
+				line: "#8b949e",
+				arrow: "#58a6ff",
+				accent: "#7ee787",
+			},
+		});
+		return (
+			<pre
+				className="bg-[#0d1117] text-[#c9d1d9] rounded-lg p-4 my-4 overflow-x-auto text-sm font-mono whitespace-pre"
+				// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid ASCII output contains styled spans
+				dangerouslySetInnerHTML={{ __html: ascii }}
+			/>
+		);
+	} catch (err) {
+		return (
+			<pre className="bg-red-950 text-red-300 rounded-lg p-4 my-4 text-sm overflow-x-auto">
+				{String(err)}
+			</pre>
+		);
+	}
 }
 
 function ToastContainer({
@@ -971,17 +1000,45 @@ export function App() {
 														</code>
 													);
 												}
+												if (className?.includes("language-mermaid")) {
+													// Extract raw text from AST to avoid highlight.js spans
+													const extractText = (n: any): string => {
+														if (!n) return "";
+														if (typeof n === "string") return n;
+														if (n.value) return n.value;
+														if (n.children) return n.children.map(extractText).join("");
+														return String(n);
+													};
+													const raw = node
+														? extractText(node)
+														: String(children).replace(/\n$/, "");
+													return <MermaidDiagram chart={raw} />;
+												}
 												return (
 													<code className={className} {...props}>
 														{children}
 													</code>
 												);
 											},
-											pre: ({ children }) => (
-												<pre className="bg-[#0d1117] text-[#c9d1d9] rounded-lg p-4 my-4 overflow-x-auto text-sm">
-													{children}
-												</pre>
-											),
+											pre: ({ children }) => {
+												// Unwrap mermaid diagrams — they render their own container
+												const child = Array.isArray(children)
+													? children[0]
+													: children;
+												if (
+													child &&
+													typeof child === "object" &&
+													"type" in child &&
+													child.type === MermaidDiagram
+												) {
+													return <>{children}</>;
+												}
+												return (
+													<pre className="bg-[#0d1117] text-[#c9d1d9] rounded-lg p-4 my-4 overflow-x-auto text-sm">
+														{children}
+													</pre>
+												);
+											},
 											hr: () => <hr className="my-8 border-border" />,
 											table: ({ children }) => (
 												<div className="my-4 overflow-x-auto">
