@@ -15,7 +15,7 @@ import {
 	TimerOff,
 	X,
 } from "lucide-react";
-import { renderMermaidASCII } from "beautiful-mermaid";
+import { renderMermaidSVG } from "beautiful-mermaid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -64,21 +64,20 @@ function useToast() {
 
 function MermaidDiagram({ chart }: { chart: string }) {
 	try {
-		const ascii = renderMermaidASCII(chart, {
-			colorMode: "html",
-			theme: {
-				fg: "#c9d1d9",
-				border: "#58a6ff",
-				line: "#8b949e",
-				arrow: "#58a6ff",
-				accent: "#7ee787",
-			},
+		const svg = renderMermaidSVG(chart, {
+			bg: "transparent",
+			fg: "#c9d1d9",
+			line: "#8b949e",
+			accent: "#58a6ff",
+			border: "#58a6ff",
+			surface: "#161b22",
+			muted: "#8b949e",
 		});
 		return (
-			<pre
-				className="bg-[#0d1117] text-[#c9d1d9] rounded-lg p-4 my-4 overflow-x-auto text-sm font-mono whitespace-pre"
-				// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid ASCII output contains styled spans
-				dangerouslySetInnerHTML={{ __html: ascii }}
+			<div
+				className="my-4 flex justify-center"
+				// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid renders trusted SVG
+				dangerouslySetInnerHTML={{ __html: svg }}
 			/>
 		);
 	} catch (err) {
