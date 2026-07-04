@@ -1,60 +1,66 @@
-# LMV PROJECT KNOWLEDGE BASE
+# lmv — Agent Instructions
 
-**Generated:** 2026-01-12
-**Commit:** f86a720a
+CLI tool for viewing/editing local markdown files in the browser. Bun + React 19 + Tailwind v4.
 
-## OVERVIEW
-
-CLI tool for viewing/editing local markdown files in browser. Bun + React 19 + Tailwind v4.
-
-## STRUCTURE
+## Structure
 
 ```
 lmv/
 ├── src/
 │   ├── cli.ts          # CLI entry (parses args, spawns server)
 │   ├── server.ts       # Bun.serve() backend + API routes
-│   ├── index.html      # HTML entry (loads Tailwind CDN)
+│   ├── index.html      # HTML entry (loads Tailwind + highlight.js via CDN)
 │   ├── main.tsx        # React root mount
-│   ├── app.tsx         # Main UI (487 lines, largest file)
-│   ├── components/     # shadcn/ui pattern (button, toggle, tooltip)
-│   └── lib/utils.ts    # cn() helper (clsx + twMerge)
+│   ├── app.tsx         # Main UI (largest file)
+│   ├── components/     # shadcn/ui pattern (button, sidebar, toc, frontmatter, toggle, tooltip)
+│   └── lib/            # file-discovery, file-tree, frontmatter, state, utils (cn helper)
 ├── scripts/build.ts    # Cross-platform binary builder
-└── CLAUDE.md           # Bun API reference (generic)
+└── docs/               # Specs and agent docs
 ```
 
-## WHERE TO LOOK
+## Where to look
 
-| Task          | Location           | Notes                     |
-| ------------- | ------------------ | ------------------------- |
-| CLI args/help | `src/cli.ts`       | port, --no-open           |
-| API routes    | `src/server.ts`    | /api/file, /api/share     |
-| UI logic      | `src/app.tsx`      | theme, save, gist sharing |
-| Add component | `src/components/`  | cva + Radix pattern       |
-| Build binary  | `scripts/build.ts` | darwin/linux targets      |
+| Task          | Location           | Notes                          |
+| ------------- | ------------------ | ------------------------------ |
+| CLI args/help | `src/cli.ts`       | port, --no-open                |
+| API routes    | `src/server.ts`    | /api/file, /api/files, /api/share |
+| UI logic      | `src/app.tsx`      | theme, save, gist sharing      |
+| Add component | `src/components/`  | cva + Radix pattern            |
+| File tree/discovery | `src/lib/`   | sidebar data layer             |
+| Build binary  | `scripts/build.ts` | darwin/linux targets           |
 
-## CONVENTIONS
+## Runtime: Bun (not Node.js)
 
-- **Runtime**: Bun exclusively (see CLAUDE.md for API patterns)
-- **Components**: shadcn/ui style - Radix primitives + cva variants
-- **Styling**: Tailwind v4 via CDN in index.html, tw-merge for conflicts
-- **Strict TS**: `noUncheckedIndexedAccess: true` - index access returns `T | undefined`
+Use Bun exclusively:
 
-## ANTI-PATTERNS
+- `bun <file>` instead of `node`/`ts-node`; `bun test` instead of jest/vitest; `bun install`, `bun run <script>`, `bun build`
+- `Bun.serve()` for the server (supports routes, WebSockets, HTML imports) — no Express, no Vite
+- Frontend is served via HTML imports: `index.html` imports `.tsx` directly and Bun bundles/transpiles automatically
+- Prefer `Bun.file` over `node:fs` readFile/writeFile; `Bun.$` for shell commands
+- Bun auto-loads `.env` — don't use dotenv
+- Full Bun API docs: `node_modules/bun-types/docs/**.md`
+
+## Conventions
+
+- **Components**: shadcn/ui style — Radix primitives + cva variants, `cn()` (clsx + tailwind-merge) for class conflicts
+- **Styling**: Tailwind v4 via CDN in `index.html` (`src/styles.css` exists but is unused)
+- **Markdown**: react-markdown + remark-gfm + rehype-highlight; mermaid diagrams via `beautiful-mermaid` (SVG-only, dark-mode theme)
+- **Strict TS**: `noUncheckedIndexedAccess: true` — index access returns `T | undefined`
+
+## Anti-patterns
 
 | Pattern               | Reason                                       |
 | --------------------- | -------------------------------------------- |
 | `as Type` assertions  | Violates type safety; use runtime validation |
-| Non-null `!` operator | Use null checks or Option pattern            |
+| Non-null `!` operator | Use null checks (biome-ignore only with justification) |
 | `any` type            | Never acceptable                             |
 | Express/Vite          | Use Bun.serve() and HTML imports             |
 
-### Known Violations (technical debt)
+### Known violations (technical debt)
 
-- `src/main.tsx:4` - non-null assertion on getElementById
-- `src/server.ts:75-76,112` - type assertions on request body
+- `src/server.ts` — type assertions on request/response bodies (lines ~212, ~327–328, ~364)
 
-## COMMANDS
+## Commands
 
 ```bash
 bun run dev         # Start dev server with HMR
@@ -63,9 +69,24 @@ bun run build:all   # Cross-compile all targets (darwin/linux)
 bun x tsc --noEmit  # Type check
 ```
 
-## NOTES
+## Agent skills
 
-- `src/styles.css` exists but unused (Tailwind CDN in HTML instead)
+### Issue tracker
+
+Issues live in GitHub Issues (`nbbaier/lmv`), managed via the `gh` CLI. External PRs are not treated as a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — no custom mapping. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Notes
+
 - No test suite yet; CI only runs typecheck + smoke tests
-- GitHub Gist sharing requires GITHUB_TOKEN env var
-- `module` field in package.json points to CLI (atypical)
+- GitHub Gist sharing requires `GITHUB_TOKEN` env var
+- `module` field in package.json points to the CLI entry (atypical)
+- `docs/multi-file.md` is the spec for the multi-file/sidebar feature
+- `docs/demo.md` is a markdown feature demo file for manually testing the viewer
