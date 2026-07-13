@@ -63,7 +63,7 @@ async function main() {
 			}
 		} else if (arg === "--no-open") {
 			autoOpen = false;
-		} else if (arg === "--recursive") {
+		} else if (arg === "--recursive" || arg === "-r") {
 			recursive = true;
 		} else if (arg === "--hidden") {
 			includeHidden = true;

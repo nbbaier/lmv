@@ -1,3 +1,4 @@
+import { renderMermaidSVG } from "beautiful-mermaid";
 import {
 	Check,
 	ExternalLink,
@@ -15,7 +16,6 @@ import {
 	TimerOff,
 	X,
 } from "lucide-react";
-import { renderMermaidSVG } from "beautiful-mermaid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -1005,7 +1005,8 @@ export function App() {
 														if (!n) return "";
 														if (typeof n === "string") return n;
 														if (n.value) return n.value;
-														if (n.children) return n.children.map(extractText).join("");
+														if (n.children)
+															return n.children.map(extractText).join("");
 														return String(n);
 													};
 													const raw = node
