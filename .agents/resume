@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v bun >/dev/null 2>&1 || [[ -x "$HOME/.bun/bin/bun" ]]; then
+	echo "[resume] Bun is ready; no services need repair"
+else
+	echo "[resume] Bun is unavailable; rerun .agents/setup" >&2
+	exit 1
+fi
