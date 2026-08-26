@@ -479,9 +479,19 @@ export function App() {
 
 			fetch(`/api/file?path=${encodeURIComponent(data.path)}`)
 				.then(async (res) => {
-					const document = await res.json();
+					const document: unknown = await res.json();
 					if (!res.ok) throw new Error("Failed to reload file");
-					return document as { content: string; filename: string };
+					if (
+						!document ||
+						typeof document !== "object" ||
+						!("content" in document) ||
+						typeof document.content !== "string" ||
+						!("filename" in document) ||
+						typeof document.filename !== "string"
+					) {
+						throw new Error("Invalid file response");
+					}
+					return { content: document.content, filename: document.filename };
 				})
 				.then((document) => {
 					if (data.path !== selectedPathRef.current) return;
