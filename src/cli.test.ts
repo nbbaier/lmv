@@ -6,7 +6,7 @@ const decoder = new TextDecoder();
 
 function runCli(args: readonly string[]) {
 	const result = Bun.spawnSync({
-		cmd: [process.execPath, "run", "src/cli.ts", ...args],
+		cmd: [process.execPath, "run", "src/cli.ts", "--", ...args],
 		cwd: REPOSITORY_ROOT,
 		env: { ...process.env, NO_COLOR: "1" },
 	});
@@ -34,6 +34,21 @@ describe("CLI process behavior", () => {
 			expect(result.stdout).toContain("Options:");
 			expect(result.stdout).toContain("Environment:");
 			expect(result.stdout).toContain("Examples:");
+		});
+	}
+
+	const helpSpellingPathCases = [
+		{ name: "short help spelling", args: ["--", "-h"] },
+		{ name: "long help spelling", args: ["--", "--help"] },
+	] as const;
+
+	for (const { name, args } of helpSpellingPathCases) {
+		test(`${name} after -- is treated as an input`, () => {
+			const result = runCli(args);
+			expect(result.exitCode).toBe(1);
+			expect(result.stdout).toBe("");
+			expect(result.stderr).toContain("Error: Input not found:");
+			expect(result.stderr).not.toContain("Usage:");
 		});
 	}
 

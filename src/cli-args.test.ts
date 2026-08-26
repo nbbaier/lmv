@@ -31,6 +31,16 @@ describe("parseCliArgs", () => {
 			args: ["--", "-notes.md"],
 			inputs: ["-notes.md"],
 		},
+		{
+			name: "short help spelling after option terminator",
+			args: ["--", "-h"],
+			inputs: ["-h"],
+		},
+		{
+			name: "long help spelling after option terminator",
+			args: ["--", "--help"],
+			inputs: ["--help"],
+		},
 	] as const;
 
 	for (const { name, args, inputs } of inputCases) {
