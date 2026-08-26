@@ -1,14 +1,17 @@
 import {
 	Check,
+	ChevronRight,
 	ExternalLink,
 	Eye,
 	FileText,
 	Loader2,
+	MoreHorizontal,
 	Monitor,
 	Moon,
 	PanelLeft,
 	Pencil,
 	Save,
+	Search,
 	Share2,
 	Sun,
 	Timer,
@@ -240,10 +243,12 @@ function useTheme() {
 }
 
 function useIsMobile() {
-	const [isMobile, setIsMobile] = useState(false);
+	const [isMobile, setIsMobile] = useState(() =>
+		window.matchMedia("(max-width: 767px)").matches,
+	);
 
 	useEffect(() => {
-		const media = window.matchMedia("(max-width: 640px)");
+		const media = window.matchMedia("(max-width: 767px)");
 		const update = () => setIsMobile(media.matches);
 		update();
 		media.addEventListener("change", update);
@@ -273,6 +278,7 @@ export function App() {
 	const [sidebarWidthPct, setSidebarWidthPct] = useState(0.25);
 	const [sortOrder, setSortOrder] = useState<SortOrder>("name-asc");
 	const [filterText, setFilterText] = useState("");
+	const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
 		new Set(),
 	);
@@ -285,6 +291,9 @@ export function App() {
 
 	const selectedPathRef = useRef<string | null>(null);
 	const hasChangesRef = useRef(false);
+	const searchInputRef = useRef<HTMLInputElement | null>(null);
+	const fileTreeRef = useRef<HTMLDivElement | null>(null);
+	const mobileActionsRef = useRef<HTMLDivElement | null>(null);
 	const lastSaveRef = useRef<{
 		path: string;
 		manual: boolean;
@@ -574,8 +583,38 @@ export function App() {
 		return () => clearTimeout(timer);
 	}, [autosave, isEditing, hasChanges, selectedPath, handleSave]);
 
+	const toggleEditing = useCallback(() => {
+		if (isEditing && hasChanges) {
+			// Discard changes when switching back to read mode.
+			setEditedContent(content);
+		}
+		setIsEditing((editing) => !editing);
+	}, [content, hasChanges, isEditing]);
+
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
+			const target = e.target;
+			const targetIsEditable =
+				target instanceof HTMLInputElement ||
+				target instanceof HTMLTextAreaElement ||
+				(target instanceof HTMLElement && target.isContentEditable);
+			const searchShortcut =
+				files.length > 1 &&
+				(((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") ||
+					(!targetIsEditable &&
+						!e.metaKey &&
+						!e.ctrlKey &&
+						!e.altKey &&
+						e.key === "/"));
+
+			if (searchShortcut) {
+				e.preventDefault();
+				setSidebarVisible(true);
+				searchInputRef.current?.focus();
+				searchInputRef.current?.select();
+				return;
+			}
+
 			if ((e.metaKey || e.ctrlKey) && e.key === "s") {
 				e.preventDefault();
 				if (isEditing && hasChanges) handleSave();
@@ -583,7 +622,7 @@ export function App() {
 			if ((e.metaKey || e.ctrlKey) && e.key === "e") {
 				if (!selectedPath) return;
 				e.preventDefault();
-				setIsEditing((prev) => !prev);
+				toggleEditing();
 			}
 			if ((e.metaKey || e.ctrlKey) && e.key === "b") {
 				if (files.length <= 1) return;
@@ -593,15 +632,38 @@ export function App() {
 		};
 		window.addEventListener("keydown", handler);
 		return () => window.removeEventListener("keydown", handler);
-	}, [isEditing, hasChanges, handleSave, files.length, selectedPath]);
+	}, [
+		isEditing,
+		hasChanges,
+		handleSave,
+		files.length,
+		selectedPath,
+		toggleEditing,
+	]);
 
-	const toggleEditing = () => {
-		if (isEditing && hasChanges) {
-			// Discard changes when switching back to view mode
-			setEditedContent(content);
-		}
-		setIsEditing(!isEditing);
-	};
+	useEffect(() => {
+		if (!mobileActionsOpen) return;
+
+		const closeOnOutsidePointer = (event: PointerEvent) => {
+			const target = event.target;
+			if (
+				target instanceof Node &&
+				!mobileActionsRef.current?.contains(target)
+			) {
+				setMobileActionsOpen(false);
+			}
+		};
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setMobileActionsOpen(false);
+		};
+
+		window.addEventListener("pointerdown", closeOnOutsidePointer);
+		window.addEventListener("keydown", closeOnEscape);
+		return () => {
+			window.removeEventListener("pointerdown", closeOnOutsidePointer);
+			window.removeEventListener("keydown", closeOnEscape);
+		};
+	}, [mobileActionsOpen]);
 
 	const handleShare = useCallback(async () => {
 		if (!shareConfigured) {
@@ -653,6 +715,15 @@ export function App() {
 		}
 	}, [shareConfigured, isEditing, editedContent, content, filename, addToast]);
 
+	const cycleTheme = () => {
+		const next: Record<Theme, Theme> = {
+			system: "light",
+			light: "dark",
+			dark: "system",
+		};
+		setTheme(next[theme]);
+	};
+
 	const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
 	const showSidebar = files.length > 1;
 
@@ -683,212 +754,334 @@ export function App() {
 
 	return (
 		<TooltipProvider delayDuration={300}>
-			<div className="min-h-screen bg-background flex flex-col">
-				{/* Header */}
-				<header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-					<div className="flex h-14 items-center justify-between px-4">
-						<div className="flex items-center gap-2 min-w-0">
+			<div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background">
+				<header className="z-50 flex-none border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+					<div className="grid h-[3.25rem] grid-cols-[minmax(0,1fr)_minmax(15rem,28rem)_minmax(0,1fr)] items-center gap-3 px-3 max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:gap-2 max-lg:px-2">
+						<div className="flex min-w-0 items-center gap-2">
 							{showSidebar && (
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
 											variant="ghost"
 											size="icon"
-											onClick={() => setSidebarVisible((v) => !v)}
-											aria-label="Toggle sidebar"
+											onClick={() => setSidebarVisible((visible) => !visible)}
+											aria-label={sidebarVisible ? "Collapse sidebar" : "Expand sidebar"}
+											aria-controls="lmv-file-tree"
+											aria-expanded={sidebarVisible}
 											type="button"
+											className="h-8 w-8 flex-none text-muted-foreground hover:text-foreground"
 										>
 											<PanelLeft className="h-4 w-4" />
 										</Button>
 									</TooltipTrigger>
-									<TooltipContent>Toggle sidebar (Cmd/Ctrl+B)</TooltipContent>
+									<TooltipContent>
+										{sidebarVisible ? "Collapse" : "Expand"} sidebar (Cmd/Ctrl+B)
+									</TooltipContent>
 								</Tooltip>
 							)}
-							<FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-							{selectedPath ? (
-								<div className="min-w-0">
-									{showSidebar ? (
-										<nav className="flex items-center gap-2 text-sm min-w-0">
-											{breadcrumbs.map((seg, idx) => {
-												// biome-ignore lint/style/noNonNullAssertion: <index is guaranteed to be in bounds>
-												const full = breadcrumbPaths[idx]!;
-												const isLast = idx === breadcrumbs.length - 1;
-												if (isLast) {
-													return (
-														<span key={full} className="font-medium truncate">
-															{seg}
-														</span>
-													);
-												}
-												return (
-													<Button
-														key={full}
-														type="button"
-														className="text-muted-foreground hover:text-foreground truncate"
-														onClick={() => {
-															setSidebarVisible(true);
-															setExpandedFolders((prev) => {
-																const next = new Set(prev);
-																const parts = full.split("/").filter(Boolean);
-																for (let i = 0; i < parts.length; i++) {
-																	next.add(parts.slice(0, i + 1).join("/"));
-																}
-																return next;
-															});
-															scrollNodeIntoView(full);
-														}}
-													>
-														{seg}
-														<span className="mx-2 text-muted-foreground/60">
-															{">"}
-														</span>
-													</Button>
-												);
-											})}
-										</nav>
-									) : (
-										<h1 className="text-sm font-medium truncate max-w-[300px] sm:max-w-none">
-											{filename}
-										</h1>
-									)}
-									{hasChanges && (
-										<span className="text-xs text-muted-foreground">
-											(modified)
-										</span>
-									)}
-								</div>
-							) : (
-								<h1 className="text-sm font-medium truncate">
-									Select a file to view
-								</h1>
-							)}
+
+							<span className="hidden flex-none font-mono text-[13px] font-semibold tracking-[-0.02em] md:inline">
+								lmv
+							</span>
+
+							<div className="hidden min-w-0 items-center gap-2 lg:flex">
+								<span className="h-4 w-px flex-none bg-border" />
+								<FileText className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+								{selectedPath ? (
+									<nav aria-label="Current file" className="flex min-w-0 items-center text-xs">
+										{breadcrumbs.map((segment, index) => {
+											const fullPath = breadcrumbPaths[index];
+											if (!fullPath) return null;
+											const isLast = index === breadcrumbs.length - 1;
+
+											return (
+												<div key={fullPath} className="flex min-w-0 items-center">
+													{index > 0 && (
+														<ChevronRight className="mx-1 h-3 w-3 flex-none text-muted-foreground/50" />
+													)}
+													{isLast ? (
+														<h1 className="truncate font-medium" title={selectedPath}>
+															{segment}
+														</h1>
+													) : (
+														<button
+															type="button"
+															className="truncate rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+															onClick={() => {
+																setSidebarVisible(true);
+																setExpandedFolders((previous) => {
+																	const next = new Set(previous);
+																	const parts = fullPath.split("/").filter(Boolean);
+																	for (let i = 0; i < parts.length; i++) {
+																		next.add(parts.slice(0, i + 1).join("/"));
+																	}
+																	return next;
+																});
+																requestAnimationFrame(() => scrollNodeIntoView(fullPath));
+															}}
+														>
+															{segment}
+														</button>
+													)}
+												</div>
+											);
+										})}
+									</nav>
+								) : (
+									<span className="truncate text-xs text-muted-foreground">No file selected</span>
+								)}
+								{hasChanges && (
+									<span
+										className="h-1.5 w-1.5 flex-none rounded-full bg-ring"
+										title="Unsaved changes"
+									/>
+								)}
+							</div>
 						</div>
 
-						<div className="flex items-center gap-2">
-							{/* Share button */}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={handleShare}
-										disabled={isSharing || !selectedPath}
-									>
-										{isSharing ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
-										) : (
-											<Share2 className="h-4 w-4" />
-										)}
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									{shareConfigured
-										? "Share as GitHub Gist"
-										: "GITHUB_TOKEN not set"}
-								</TooltipContent>
-							</Tooltip>
+						{showSidebar ? (
+							<div className="relative min-w-0">
+								<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+								<input
+									ref={searchInputRef}
+									type="search"
+									value={filterText}
+									onChange={(event) => setFilterText(event.target.value)}
+									onFocus={() => setSidebarVisible(true)}
+									onKeyDown={(event) => {
+										if (event.key === "Escape") {
+											if (filterText) setFilterText("");
+											else event.currentTarget.blur();
+										}
+										if (event.key === "ArrowDown") {
+											event.preventDefault();
+											setSidebarVisible(true);
+											requestAnimationFrame(() => fileTreeRef.current?.focus());
+										}
+									}}
+									placeholder="Search files…"
+									aria-label="Search files by path"
+									aria-controls={sidebarVisible ? "lmv-file-tree" : undefined}
+									className="h-8 w-full rounded-md border border-border bg-muted/45 pl-8 pr-8 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/80 hover:bg-muted/65 focus:border-ring focus:bg-background [&::-webkit-search-cancel-button]:hidden"
+								/>
+								<kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-background/70 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground sm:block">
+									/
+								</kbd>
+							</div>
+						) : (
+							<div className="min-w-0 text-center lg:invisible">
+								<span className="block truncate text-xs font-medium">
+									{filename || "Local Markdown Viewer"}
+								</span>
+							</div>
+						)}
 
-							{/* Theme toggle */}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										onClick={() => {
-											const next: Record<Theme, Theme> = {
-												system: "light",
-												light: "dark",
-												dark: "system",
-											};
-											setTheme(next[theme]);
-										}}
-									>
-										<ThemeIcon className="h-4 w-4" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}
-								</TooltipContent>
-							</Tooltip>
+						<div className="flex min-w-0 items-center justify-end gap-1">
+							<div
+								className="hidden h-8 items-center rounded-md bg-muted/70 p-0.5 lg:flex"
+								role="group"
+								aria-label="Document mode"
+							>
+								<Button
+									type="button"
+									variant="ghost"
+									onClick={() => {
+										if (isEditing) toggleEditing();
+									}}
+									disabled={!selectedPath}
+									aria-pressed={!isEditing}
+									className={cn(
+										"h-7 gap-1.5 rounded px-2 text-xs font-normal text-muted-foreground shadow-none hover:text-foreground",
+										!isEditing && "bg-background text-foreground shadow-sm hover:bg-background",
+									)}
+								>
+									<Eye className="h-3.5 w-3.5" />
+									Read
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									onClick={() => {
+										if (!isEditing) toggleEditing();
+									}}
+									disabled={!selectedPath}
+									aria-pressed={isEditing}
+									className={cn(
+										"h-7 gap-1.5 rounded px-2 text-xs font-normal text-muted-foreground shadow-none hover:text-foreground",
+										isEditing && "bg-background text-foreground shadow-sm hover:bg-background",
+									)}
+								>
+									<Pencil className="h-3.5 w-3.5" />
+									Edit
+								</Button>
+							</div>
 
-							{/* Edit toggle */}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Toggle
-										variant="outline"
-										pressed={isEditing}
-										onPressedChange={toggleEditing}
-										aria-label="Toggle edit mode"
-										disabled={!selectedPath}
-									>
-										{isEditing ? (
-											<Eye className="h-4 w-4" />
-										) : (
-											<Pencil className="h-4 w-4" />
-										)}
-									</Toggle>
-								</TooltipTrigger>
-								<TooltipContent>
-									{isEditing ? "View mode (Cmd+E)" : "Edit mode (Cmd+E)"}
-								</TooltipContent>
-							</Tooltip>
-
-							{/* Save button */}
 							{isEditing && (
-								<>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												size="sm"
-												onClick={() => handleSave()}
-												disabled={!selectedPath || !hasChanges || isSaving}
-												className={cn(
-													"transition-all",
-													saveSuccess && "bg-green-600 hover:bg-green-600",
-												)}
-											>
-												{saveSuccess ? (
-													<>
-														<Check className="h-4 w-4" />
-														Saved
-													</>
-												) : (
-													<>
-														<Save className="h-4 w-4" />
-														Save
-													</>
-												)}
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent>Save changes (Cmd+S)</TooltipContent>
-									</Tooltip>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											size="sm"
+											onClick={() => handleSave()}
+											disabled={!selectedPath || !hasChanges || isSaving}
+											aria-label="Save changes"
+											className={cn(
+												"h-8 px-2.5 max-lg:w-8 max-lg:px-0",
+												saveSuccess && "bg-green-600 hover:bg-green-600",
+											)}
+										>
+											{saveSuccess ? <Check /> : <Save />}
+											<span className="max-lg:hidden">{saveSuccess ? "Saved" : "Save"}</span>
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>Save changes (Cmd/Ctrl+S)</TooltipContent>
+								</Tooltip>
+							)}
 
+							<div className="mx-1 hidden h-4 w-px bg-border lg:block" />
+
+							<div className="hidden items-center gap-0.5 lg:flex">
+								{isEditing && (
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Toggle
-												variant="outline"
 												pressed={autosave}
 												onPressedChange={setAutosave}
 												aria-label="Toggle autosave"
+												className="h-8 min-w-8 px-1.5 text-muted-foreground"
 											>
-												{autosave ? (
-													<Timer className="h-4 w-4" />
-												) : (
-													<TimerOff className="h-4 w-4" />
-												)}
+												{autosave ? <Timer /> : <TimerOff />}
 											</Toggle>
 										</TooltipTrigger>
-										<TooltipContent>
-											{autosave ? "Autosave on" : "Autosave off"}
-										</TooltipContent>
+										<TooltipContent>{autosave ? "Autosave on" : "Autosave off"}</TooltipContent>
 									</Tooltip>
-								</>
-							)}
+								)}
+
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											onClick={handleShare}
+											disabled={isSharing || !selectedPath}
+											aria-label="Share as GitHub Gist"
+											className="h-8 w-8 text-muted-foreground hover:text-foreground"
+										>
+											{isSharing ? <Loader2 className="animate-spin" /> : <Share2 />}
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>
+										{shareConfigured ? "Share as GitHub Gist" : "GITHUB_TOKEN not set"}
+									</TooltipContent>
+								</Tooltip>
+
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											onClick={cycleTheme}
+											aria-label={`Cycle theme; current theme is ${theme}`}
+											className="h-8 w-8 text-muted-foreground hover:text-foreground"
+										>
+											<ThemeIcon />
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>
+										Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}
+									</TooltipContent>
+								</Tooltip>
+							</div>
+
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon"
+										onClick={toggleEditing}
+										disabled={!selectedPath}
+										aria-label={isEditing ? "Switch to read mode" : "Switch to edit mode"}
+										className="h-8 w-8 text-muted-foreground hover:text-foreground lg:hidden"
+									>
+										{isEditing ? <Eye /> : <Pencil />}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									{isEditing ? "Read mode" : "Edit mode"} (Cmd/Ctrl+E)
+								</TooltipContent>
+							</Tooltip>
+
+							<div ref={mobileActionsRef} className="relative lg:hidden">
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onClick={() => setMobileActionsOpen((open) => !open)}
+									aria-label="More actions"
+									aria-expanded={mobileActionsOpen}
+									aria-controls="lmv-mobile-actions"
+									className="h-8 w-8 text-muted-foreground hover:text-foreground"
+								>
+									<MoreHorizontal />
+								</Button>
+
+								{mobileActionsOpen && (
+									<div
+										id="lmv-mobile-actions"
+										className="absolute right-0 top-10 z-50 w-56 rounded-lg border border-border bg-background p-1.5 shadow-xl"
+										role="menu"
+									>
+										<Button
+											type="button"
+											variant="ghost"
+											onClick={() => {
+												setMobileActionsOpen(false);
+												handleShare();
+											}}
+											disabled={isSharing || !selectedPath}
+											role="menuitem"
+											className="h-9 w-full justify-start px-2.5 text-xs font-normal"
+										>
+											{isSharing ? <Loader2 className="animate-spin" /> : <Share2 />}
+											Share as GitHub Gist
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											onClick={() => {
+												cycleTheme();
+												setMobileActionsOpen(false);
+											}}
+											role="menuitem"
+											className="h-9 w-full justify-start px-2.5 text-xs font-normal"
+										>
+											<ThemeIcon />
+											Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}
+										</Button>
+										{isEditing && (
+											<Button
+												type="button"
+												variant="ghost"
+												onClick={() => setAutosave((enabled) => !enabled)}
+												aria-pressed={autosave}
+												role="menuitem"
+												className="h-9 w-full justify-start px-2.5 text-xs font-normal"
+											>
+												{autosave ? <Timer /> : <TimerOff />}
+												Autosave {autosave ? "on" : "off"}
+											</Button>
+										)}
+									</div>
+								)}
+							</div>
 						</div>
 					</div>
 				</header>
 
-				<div className="flex flex-1 min-h-0">
+				<div className="flex min-h-0 flex-1 overflow-hidden">
 					{showSidebar && (
 						<Sidebar
 							files={files}
@@ -905,24 +1098,33 @@ export function App() {
 							sortOrder={sortOrder}
 							onSortOrderChange={setSortOrder}
 							filterText={filterText}
-							onFilterTextChange={setFilterText}
 							expandedFolders={expandedFolders}
 							onExpandedFoldersChange={setExpandedFolders}
 							isMobile={isMobile}
+							treeRef={fileTreeRef}
 						/>
 					)}
 
-					{/* Main content */}
-					<main className="flex-1 min-w-0 overflow-auto">
-						<div className="document-container mx-auto px-5 py-10 sm:px-8 sm:py-12">
+					<main
+						className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
+						aria-label="Document"
+						aria-hidden={isMobile && sidebarVisible ? true : undefined}
+						inert={isMobile && sidebarVisible ? true : undefined}
+					>
+						<div className="document-layout document-container mx-auto px-5 py-8 sm:px-8 sm:py-10 lg:py-12">
 							{!selectedPath ? (
-								<div className="text-muted-foreground text-sm">
-									Select a file to view
+								<div className="flex min-h-[55vh] items-center justify-center">
+									<div className="flex flex-col items-center gap-3 text-center text-muted-foreground">
+										<div className="rounded-lg border border-border bg-muted/35 p-2.5">
+											<FileText className="h-4 w-4" />
+										</div>
+										<p className="text-sm">Select a file to view</p>
+									</div>
 								</div>
 							) : isEditing ? (
-								<div className="min-h-[calc(100vh-8rem)]">
+								<div className="document-primary min-h-[calc(100dvh-7.25rem)]">
 									<textarea
-										className="w-full min-h-[calc(100vh-10rem)] p-4 rounded-lg border border-input bg-background text-foreground font-mono text-sm leading-relaxed resize-none outline-none focus:ring-2 focus:ring-ring"
+										className="min-h-[calc(100dvh-7.25rem)] w-full resize-none rounded-lg border border-input bg-background p-4 font-mono text-sm leading-relaxed text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
 										value={editedContent}
 										onChange={(e) => setEditedContent(e.target.value)}
 										placeholder="Start writing markdown..."
@@ -930,7 +1132,7 @@ export function App() {
 									/>
 								</div>
 							) : (
-								<article className="markdown-body">
+								<article className="document-primary markdown-body">
 									{parsed.frontmatter && (
 										<FrontmatterDisplay frontmatter={parsed.frontmatter} />
 									)}

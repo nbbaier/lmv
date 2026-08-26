@@ -3,11 +3,18 @@ import {
 	ChevronDown,
 	ChevronRight,
 	FileText,
+	Folder,
+	FolderOpen,
 	Link2,
+	RefreshCw,
 	X,
 } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useEffect, useMemo, useRef } from "react";
+import type {
+	KeyboardEvent as ReactKeyboardEvent,
+	PointerEvent as ReactPointerEvent,
+	RefObject,
+} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ApiFile, SortOrder, TreeNode } from "../lib/file-tree";
 import {
 	buildFileTree,
@@ -42,10 +49,10 @@ export function Sidebar({
 	sortOrder,
 	onSortOrderChange,
 	filterText,
-	onFilterTextChange,
 	expandedFolders,
 	onExpandedFoldersChange,
 	isMobile,
+	treeRef,
 }: {
 	files: ApiFile[];
 	selectedPath: string | null;
@@ -61,10 +68,10 @@ export function Sidebar({
 	sortOrder: SortOrder;
 	onSortOrderChange: (next: SortOrder) => void;
 	filterText: string;
-	onFilterTextChange: (next: string) => void;
 	expandedFolders: Set<string>;
 	onExpandedFoldersChange: (next: Set<string>) => void;
 	isMobile: boolean;
+	treeRef: RefObject<HTMLDivElement | null>;
 }) {
 	const tree = useMemo(
 		() => buildFileTree(files, sortOrder),
@@ -78,21 +85,25 @@ export function Sidebar({
 		() => flattenVisibleNodes(filteredTree, expandedFolders, autoExpand),
 		[filteredTree, expandedFolders, autoExpand],
 	);
+	const fallbackCursorPath =
+		(filterText ? visible.find((entry) => entry.node.kind === "file") : visible[0])
+			?.node.path ?? null;
 
-	const listRef = useRef<HTMLDivElement | null>(null);
+	const sidebarRef = useRef<HTMLDivElement | null>(null);
+	const [treeFocused, setTreeFocused] = useState(false);
 
 	useEffect(() => {
 		if (!cursorPath && visible.length > 0) {
-			onCursorPathChange(visible[0]?.node.path ?? null);
+			onCursorPathChange(fallbackCursorPath);
 		}
-	}, [cursorPath, visible, onCursorPathChange]);
+	}, [cursorPath, fallbackCursorPath, visible.length, onCursorPathChange]);
 
 	useEffect(() => {
 		const visiblePaths = new Set(visible.map((v) => v.node.path));
 		if (cursorPath && !visiblePaths.has(cursorPath)) {
-			onCursorPathChange(visible[0]?.node.path ?? null);
+			onCursorPathChange(fallbackCursorPath);
 		}
-	}, [cursorPath, visible, onCursorPathChange]);
+	}, [cursorPath, fallbackCursorPath, visible, onCursorPathChange]);
 
 	const toggleFolder = (path: string) => {
 		const next = new Set(expandedFolders);
@@ -102,7 +113,15 @@ export function Sidebar({
 	};
 
 	const onKeyDown = (e: ReactKeyboardEvent) => {
-		if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter")
+		if (
+			e.key !== "ArrowDown" &&
+			e.key !== "ArrowUp" &&
+			e.key !== "ArrowRight" &&
+			e.key !== "ArrowLeft" &&
+			e.key !== "Home" &&
+			e.key !== "End" &&
+			e.key !== "Enter"
+		)
 			return;
 		if (visible.length === 0) return;
 
@@ -112,59 +131,152 @@ export function Sidebar({
 			? visible.findIndex((v) => v.node.path === cursorPath)
 			: -1;
 
-		if (e.key === "ArrowDown") {
-			const next = visible[Math.min(idx + 1, visible.length - 1)]!;
+		const moveTo = (index: number) => {
+			const next = visible[index];
+			if (!next) return;
 			onCursorPathChange(next.node.path);
 			scrollNodeIntoView(next.node.path);
+		};
+
+		if (e.key === "ArrowDown") {
+			moveTo(Math.min(idx + 1, visible.length - 1));
 			return;
 		}
 
 		if (e.key === "ArrowUp") {
-			const next = visible[Math.max(idx - 1, 0)]!;
-			onCursorPathChange(next.node.path);
-			scrollNodeIntoView(next.node.path);
+			moveTo(Math.max(idx - 1, 0));
 			return;
 		}
 
+		if (e.key === "Home") {
+			moveTo(0);
+			return;
+		}
+
+		if (e.key === "End") {
+			moveTo(visible.length - 1);
+			return;
+		}
+
+		const currentIndex = idx >= 0 ? idx : 0;
+		const currentEntry = visible[currentIndex];
+		if (!currentEntry) return;
+		const current = currentEntry.node;
+
 		if (e.key === "Enter") {
-			const current = visible[Math.max(idx, 0)]?.node;
-			if (!current) return;
 			if (current.kind === "folder") toggleFolder(current.path);
 			else onOpenPath(current.path);
+			return;
+		}
+
+		if (e.key === "ArrowRight") {
+			if (current.kind !== "folder") return;
+			const expanded =
+				expandedFolders.has(current.path) || autoExpand.has(current.path);
+			if (!expanded) {
+				toggleFolder(current.path);
+				return;
+			}
+			const child = visible[currentIndex + 1];
+			if (child && child.depth > currentEntry.depth) moveTo(currentIndex + 1);
+			return;
+		}
+
+		if (e.key === "ArrowLeft") {
+			if (
+				current.kind === "folder" &&
+				expandedFolders.has(current.path) &&
+				!autoExpand.has(current.path)
+			) {
+				toggleFolder(current.path);
+				return;
+			}
+
+			const parentPath = current.path.split("/").slice(0, -1).join("/");
+			if (!parentPath) return;
+			const parentIndex = visible.findIndex(
+				(entry) => entry.node.path === parentPath,
+			);
+			if (parentIndex >= 0) moveTo(parentIndex);
 		}
 	};
 
-	const onResizeMouseDown = (e: React.MouseEvent) => {
-		e.preventDefault();
-		const startX = e.clientX;
-		const startPct = sidebarWidthPct;
-
-		const onMove = (ev: MouseEvent) => {
-			const delta = ev.clientX - startX;
-			const next = startPct + delta / window.innerWidth;
-			onSidebarWidthPctChange(Math.min(0.6, Math.max(0.15, next)));
-		};
-		const onUp = () => {
-			window.removeEventListener("mousemove", onMove);
-			window.removeEventListener("mouseup", onUp);
-		};
-		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
+	const updateSidebarWidth = (width: number) => {
+		const minWidth = 208;
+		const maxWidth = Math.min(480, window.innerWidth * 0.6);
+		const nextWidth = Math.min(maxWidth, Math.max(minWidth, width));
+		onSidebarWidthPctChange(nextWidth / window.innerWidth);
 	};
 
-	const widthStyle = { width: `${sidebarWidthPct * 100}%` };
+	const onResizePointerDown = (e: ReactPointerEvent) => {
+		e.preventDefault();
+		const startX = e.clientX;
+		const startWidth =
+			sidebarRef.current?.getBoundingClientRect().width ??
+			sidebarWidthPct * window.innerWidth;
+		const previousCursor = document.body.style.cursor;
+		const previousUserSelect = document.body.style.userSelect;
+		document.body.style.cursor = "col-resize";
+		document.body.style.userSelect = "none";
+
+		const onMove = (ev: PointerEvent) => {
+			updateSidebarWidth(startWidth + ev.clientX - startX);
+		};
+		const onUp = () => {
+			document.body.style.cursor = previousCursor;
+			document.body.style.userSelect = previousUserSelect;
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			window.removeEventListener("pointercancel", onUp);
+		};
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+		window.addEventListener("pointercancel", onUp);
+	};
+
+	const onResizeKeyDown = (e: ReactKeyboardEvent) => {
+		if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+		e.preventDefault();
+		const currentWidth =
+			sidebarRef.current?.getBoundingClientRect().width ??
+			sidebarWidthPct * window.innerWidth;
+		const direction = e.key === "ArrowLeft" ? -1 : 1;
+		updateSidebarWidth(currentWidth + direction * (e.shiftKey ? 32 : 8));
+	};
+
+	const widthStyle = {
+		width: `clamp(13rem, ${sidebarWidthPct * 100}vw, 30rem)`,
+	};
+	const visibleFileCount = visible.filter(
+		(entry) => entry.node.kind === "file",
+	).length;
 
 	const content = (
-		<div className="h-full flex flex-col border-r border-border bg-background">
-			<div className="flex items-center justify-between gap-2 p-3 border-b border-border">
+		<aside
+			aria-label="File browser"
+			className="flex h-full min-h-0 flex-col border-r border-border bg-background md:bg-secondary/25"
+		>
+			<div className="border-b border-border px-2 pb-2 pt-2">
+				<div className="flex h-8 items-center justify-between gap-2 px-1">
 				<div className="flex items-center gap-2 min-w-0">
-					<FileText className="h-4 w-4 text-muted-foreground" />
-					<div className="text-sm font-medium truncate">Files</div>
+					<div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+						Files
+					</div>
+					<span className="text-xs tabular-nums text-muted-foreground/70">
+						{filterText ? `${visibleFileCount}/${files.length}` : files.length}
+					</span>
 				</div>
 				<div className="flex items-center gap-1">
 					{pendingRefresh && (
-						<Button size="sm" variant="outline" onClick={onRefresh}>
-							Refresh
+						<Button
+							type="button"
+							size="icon"
+							variant="ghost"
+							onClick={onRefresh}
+							aria-label="Refresh file list"
+							className="h-7 w-7 text-ring hover:text-foreground"
+						>
+							<RefreshCw className="h-3.5 w-3.5" />
 						</Button>
 					)}
 					{isMobile && (
@@ -173,38 +285,54 @@ export function Sidebar({
 							size="icon"
 							onClick={() => onSidebarVisibleChange(false)}
 							aria-label="Close sidebar"
+							className="h-7 w-7"
 						>
-							<X className="h-4 w-4" />
+							<X className="h-3.5 w-3.5" />
 						</Button>
 					)}
 				</div>
 			</div>
 
-			<div className="p-3 flex flex-col gap-2 border-b border-border">
-				<input
-					value={filterText}
-					onChange={(e) => onFilterTextChange(e.target.value)}
-					placeholder="Filter…"
-					className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-				/>
+				<label className="sr-only" htmlFor="lmv-file-sort">
+					Sort files
+				</label>
 				<select
+					id="lmv-file-sort"
 					value={sortOrder}
-					onChange={(e) => onSortOrderChange(e.target.value as SortOrder)}
-					className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+					onChange={(e) => {
+						const value = e.target.value;
+						if (
+							value === "name-asc" ||
+							value === "name-desc" ||
+							value === "modified-desc" ||
+							value === "modified-asc"
+						) {
+							onSortOrderChange(value);
+						}
+					}}
+					className="h-8 w-full rounded-md border border-transparent bg-transparent px-2 text-xs text-muted-foreground outline-none transition-colors hover:border-border hover:bg-background/70 hover:text-foreground focus:border-ring focus:bg-background"
 				>
-					<option value="name-asc">Name (A-Z)</option>
-					<option value="name-desc">Name (Z-A)</option>
-					<option value="modified-desc">Modified (newest)</option>
-					<option value="modified-asc">Modified (oldest)</option>
+					<option value="name-asc">Name · A–Z</option>
+					<option value="name-desc">Name · Z–A</option>
+					<option value="modified-desc">Modified · newest</option>
+					<option value="modified-asc">Modified · oldest</option>
 				</select>
 			</div>
 
 			<div
-				ref={listRef}
+				id="lmv-file-tree"
+				ref={treeRef}
+				role="tree"
+				aria-label="Markdown files"
+				aria-activedescendant={cursorPath ? nodeDomId(cursorPath) : undefined}
+				tabIndex={0}
 				onKeyDown={onKeyDown}
-				className="flex-1 overflow-auto outline-none focus:ring-2 focus:ring-ring"
+				onMouseDown={() => treeRef.current?.focus({ preventScroll: true })}
+				onFocus={() => setTreeFocused(true)}
+				onBlur={() => setTreeFocused(false)}
+				className="min-h-0 flex-1 overflow-auto overscroll-contain outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
 			>
-				<div className="p-2">
+				<div className="p-1.5">
 					{visible.map(({ node, depth }) => (
 						<TreeRow
 							key={`${node.kind}:${node.path}`}
@@ -216,26 +344,34 @@ export function Sidebar({
 							}
 							selectedPath={selectedPath}
 							cursorPath={cursorPath}
+							treeFocused={treeFocused}
 							onCursor={onCursorPathChange}
 							onToggleFolder={toggleFolder}
 							onOpenFile={(path) => onOpenPath(path)}
 						/>
 					))}
+					{visible.length === 0 && (
+						<div className="px-3 py-8 text-center text-xs leading-relaxed text-muted-foreground">
+							No files match “{filterText.trim()}”
+						</div>
+					)}
 				</div>
 			</div>
-		</div>
+		</aside>
 	);
 
 	if (!sidebarVisible) return null;
 
 	if (isMobile) {
 		return (
-			<div className="fixed inset-0 z-40">
-				<div
-					className="absolute inset-0 bg-black/40"
+			<div className="fixed inset-x-0 bottom-0 top-[3.25rem] z-40">
+				<button
+					type="button"
+					aria-label="Dismiss sidebar"
+					className="absolute inset-0 cursor-default bg-foreground/20 backdrop-blur-[1px]"
 					onClick={() => onSidebarVisibleChange(false)}
 				/>
-				<div className="absolute inset-y-0 left-0 w-[85vw] max-w-[360px] shadow-xl">
+				<div className="absolute inset-y-0 left-0 w-[88vw] max-w-[360px] shadow-2xl">
 					{content}
 				</div>
 			</div>
@@ -243,13 +379,30 @@ export function Sidebar({
 	}
 
 	return (
-		<div className="relative flex-shrink-0" style={widthStyle}>
+		<div
+			ref={sidebarRef}
+			className="relative flex-shrink-0"
+			style={widthStyle}
+		>
 			{content}
 			<div
-				onMouseDown={onResizeMouseDown}
-				className="absolute top-0 right-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-border"
-				aria-hidden
-			/>
+				role="separator"
+				aria-label="Resize sidebar"
+				aria-orientation="vertical"
+				aria-valuemin={208}
+				aria-valuemax={480}
+				aria-valuenow={Math.round(
+					Math.min(480, Math.max(208, sidebarWidthPct * window.innerWidth)),
+				)}
+				tabIndex={0}
+				onPointerDown={onResizePointerDown}
+				onKeyDown={onResizeKeyDown}
+				onDoubleClick={() => onSidebarWidthPctChange(0.25)}
+				className="group absolute -right-1.5 top-0 z-10 flex h-full w-3 cursor-col-resize touch-none items-center justify-center outline-none"
+			>
+				<div className="h-full w-px bg-transparent transition-colors group-hover:bg-ring/50 group-focus-visible:w-0.5 group-focus-visible:bg-ring" />
+				<div className="absolute h-7 w-0.5 rounded-full bg-border transition-colors group-hover:bg-ring/70 group-focus-visible:bg-ring" />
+			</div>
 		</div>
 	);
 }
@@ -260,6 +413,7 @@ function TreeRow({
 	expanded,
 	selectedPath,
 	cursorPath,
+	treeFocused,
 	onCursor,
 	onToggleFolder,
 	onOpenFile,
@@ -269,44 +423,66 @@ function TreeRow({
 	expanded: boolean;
 	selectedPath: string | null;
 	cursorPath: string | null;
+	treeFocused: boolean;
 	onCursor: (path: string) => void;
 	onToggleFolder: (path: string) => void;
 	onOpenFile: (path: string) => void;
 }) {
 	const isSelected = selectedPath === node.path;
 	const isCursor = cursorPath === node.path;
-	const paddingLeft = 8 + depth * 14;
+	const paddingLeft = 6 + depth * 14;
 
 	return (
 		<div
 			id={nodeDomId(node.path)}
 			style={{ paddingLeft }}
 			className={cn(
-				"flex items-center gap-2 rounded-md px-2 py-1.5 text-sm select-none",
-				isSelected && "bg-accent text-accent-foreground",
-				!isSelected && "hover:bg-muted",
-				isCursor && !isSelected && "ring-1 ring-ring",
+				"relative flex h-7 select-none items-center gap-1.5 rounded-md pr-2 text-[13px] leading-5 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-transparent",
+				isSelected &&
+					"bg-accent/80 font-medium text-accent-foreground before:bg-ring",
+				!isSelected && "text-foreground/85 hover:bg-muted/70 hover:text-foreground",
+				isCursor && treeFocused && !isSelected &&
+					"outline outline-1 -outline-offset-1 outline-ring/60",
 			)}
-			onMouseEnter={() => onCursor(node.path)}
 			onClick={() => {
 				onCursor(node.path);
 				if (node.kind === "folder") onToggleFolder(node.path);
 				else onOpenFile(node.path);
 			}}
 			role="treeitem"
+			aria-level={depth + 1}
+			aria-expanded={node.kind === "folder" ? expanded : undefined}
+			aria-selected={isSelected}
+			title={node.path}
 		>
 			{node.kind === "folder" ? (
-				expanded ? (
-					<ChevronDown className="h-4 w-4 text-muted-foreground" />
-				) : (
-					<ChevronRight className="h-4 w-4 text-muted-foreground" />
-				)
+				<>
+					{expanded ? (
+						<ChevronDown className="h-3 w-3 text-muted-foreground/80" />
+					) : (
+						<ChevronRight className="h-3 w-3 text-muted-foreground/80" />
+					)}
+					{expanded ? (
+						<FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+					) : (
+						<Folder className="h-3.5 w-3.5 text-muted-foreground" />
+					)}
+				</>
 			) : node.error ? (
-				<AlertTriangle className="h-4 w-4 text-red-500" />
+				<>
+					<span className="w-3" />
+					<AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+				</>
 			) : node.isSymlink ? (
-				<Link2 className="h-4 w-4 text-muted-foreground" />
+				<>
+					<span className="w-3" />
+					<Link2 className="h-3.5 w-3.5 text-muted-foreground" />
+				</>
 			) : (
-				<FileText className="h-4 w-4 text-muted-foreground" />
+				<>
+					<span className="w-3" />
+					<FileText className="h-3.5 w-3.5 text-muted-foreground" />
+				</>
 			)}
 
 			<span className="truncate min-w-0 flex-1">{node.name}</span>
