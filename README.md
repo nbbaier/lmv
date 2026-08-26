@@ -39,7 +39,7 @@ lmv README.md --no-open
 ## Features
 
 - **Markdown rendering** with GFM support (tables, task lists, strikethrough)
-- **Syntax highlighting** for 180+ languages
+- **Syntax highlighting** for common web, scripting, and systems languages
 - **Dark/Light/System theme** toggle
 - **Edit mode** with live preview toggle (Cmd+E)
 - **Save to disk** (Cmd+S)

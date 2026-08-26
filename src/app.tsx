@@ -1,4 +1,3 @@
-import { renderMermaidSVG } from "beautiful-mermaid";
 import {
 	Check,
 	ExternalLink,
@@ -18,7 +17,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { Button } from "./components/button";
 import { FrontmatterDisplay } from "./components/frontmatter";
@@ -33,6 +31,7 @@ import {
 } from "./components/tooltip";
 import type { ApiFile, SortOrder } from "./lib/file-tree";
 import { parseFrontmatter } from "./lib/frontmatter";
+import { rehypeHighlight } from "./lib/syntax-highlighting";
 import { cn } from "./lib/utils";
 
 type Theme = "light" | "dark" | "system";
@@ -63,30 +62,60 @@ function useToast() {
 }
 
 function MermaidDiagram({ chart }: { chart: string }) {
-	try {
-		const svg = renderMermaidSVG(chart, {
-			bg: "transparent",
-			fg: "#c9d1d9",
-			line: "#8b949e",
-			accent: "#58a6ff",
-			border: "#58a6ff",
-			surface: "#161b22",
-			muted: "#8b949e",
-		});
-		return (
-			<div
-				className="my-4 flex justify-center"
-				// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid renders trusted SVG
-				dangerouslySetInnerHTML={{ __html: svg }}
-			/>
-		);
-	} catch (err) {
+	const [result, setResult] = useState<{
+		chart: string;
+		svg?: string;
+		error?: string;
+	}>();
+
+	useEffect(() => {
+		let cancelled = false;
+
+		import("beautiful-mermaid")
+			.then(({ renderMermaidSVG }) => {
+				const rendered = renderMermaidSVG(chart, {
+					bg: "transparent",
+					fg: "#c9d1d9",
+					line: "#8b949e",
+					accent: "#58a6ff",
+					border: "#58a6ff",
+					surface: "#161b22",
+					muted: "#8b949e",
+				});
+				if (!cancelled) setResult({ chart, svg: rendered });
+			})
+			.catch((err: unknown) => {
+				if (!cancelled) setResult({ chart, error: String(err) });
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [chart]);
+
+	if (result?.chart === chart && result.error) {
 		return (
 			<pre className="bg-red-950 text-red-300 rounded-lg p-4 my-4 text-sm overflow-x-auto">
-				{String(err)}
+				{result.error}
 			</pre>
 		);
 	}
+
+	if (result?.chart !== chart || !result.svg) {
+		return (
+			<div className="my-4 flex justify-center text-sm text-muted-foreground">
+				Rendering diagram…
+			</div>
+		);
+	}
+
+	return (
+		<div
+			className="my-4 flex justify-center"
+			// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid renders trusted SVG
+			dangerouslySetInnerHTML={{ __html: result.svg }}
+		/>
+	);
 }
 
 function ToastContainer({
