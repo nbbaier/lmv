@@ -43,6 +43,10 @@ import {
 import type { ApiFile, SortOrder } from "./lib/file-tree";
 import { parseFrontmatter } from "./lib/frontmatter";
 import { rehypeHighlight } from "./lib/syntax-highlighting";
+import {
+	extractHeadings,
+	slugifyHeading,
+} from "./lib/table-of-contents";
 import { cn } from "./lib/utils";
 
 type Theme = "light" | "dark" | "system";
@@ -294,6 +298,8 @@ export function App() {
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 	const fileTreeRef = useRef<HTMLDivElement | null>(null);
 	const mobileActionsRef = useRef<HTMLDivElement | null>(null);
+	const documentScrollerRef = useRef<HTMLElement | null>(null);
+	const previousSelectedPathRef = useRef<string | null>(null);
 	const lastSaveRef = useRef<{
 		path: string;
 		manual: boolean;
@@ -301,6 +307,22 @@ export function App() {
 
 	useEffect(() => {
 		selectedPathRef.current = selectedPath;
+	}, [selectedPath]);
+	useEffect(() => {
+		if (!selectedPath) return;
+		documentScrollerRef.current?.scrollTo({ top: 0, left: 0 });
+		if (
+			previousSelectedPathRef.current &&
+			previousSelectedPathRef.current !== selectedPath &&
+			window.location.hash
+		) {
+			window.history.replaceState(
+				null,
+				"",
+				`${window.location.pathname}${window.location.search}`,
+			);
+		}
+		previousSelectedPathRef.current = selectedPath;
 	}, [selectedPath]);
 	useEffect(() => {
 		hasChangesRef.current = hasChanges;
@@ -744,6 +766,11 @@ export function App() {
 	);
 
 	const parsed = useMemo(() => parseFrontmatter(content), [content]);
+	const headings = useMemo(() => extractHeadings(parsed.body), [parsed.body]);
+	const headingIdsByLine = useMemo(
+		() => new Map(headings.map(({ line, id }) => [line, id])),
+		[headings],
+	);
 
 	const breadcrumbs = selectedPath
 		? selectedPath.split("/").filter(Boolean)
@@ -1106,12 +1133,21 @@ export function App() {
 					)}
 
 					<main
-						className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
+						ref={documentScrollerRef}
+						className="document-scroller min-w-0 flex-1 overflow-y-auto overscroll-contain"
 						aria-label="Document"
 						aria-hidden={isMobile && showSidebar && sidebarVisible ? true : undefined}
 						inert={isMobile && showSidebar && sidebarVisible ? true : undefined}
 					>
-						<div className="document-layout document-container mx-auto px-5 py-8 sm:px-8 sm:py-10 lg:py-12">
+						<div
+							className={cn(
+								"document-layout document-container mx-auto px-5 py-8 sm:px-8 sm:py-10 lg:py-12",
+								selectedPath &&
+									!isEditing &&
+									headings.length > 0 &&
+									"document-container--with-rail",
+							)}
+						>
 							{!selectedPath ? (
 								<div className="flex min-h-[55vh] items-center justify-center">
 									<div className="flex flex-col items-center gap-3 text-center text-muted-foreground">
@@ -1132,95 +1168,95 @@ export function App() {
 									/>
 								</div>
 							) : (
-								<article className="document-primary markdown-body">
+								<article className="document-reading-layout">
 									{parsed.frontmatter && (
-										<FrontmatterDisplay frontmatter={parsed.frontmatter} />
+										<div className="document-frontmatter">
+											<FrontmatterDisplay frontmatter={parsed.frontmatter} />
+										</div>
 									)}
-									<TableOfContents markdown={parsed.body} />
-									<div className="markdown-content">
+									<TableOfContents
+										headings={headings}
+										scrollContainerRef={documentScrollerRef}
+									/>
+									<div className="document-primary markdown-body">
+										<div className="markdown-content">
 										<ReactMarkdown
 										remarkPlugins={[remarkGfm]}
 										rehypePlugins={[rehypeHighlight]}
 										components={{
-											h1: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h1: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h1
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h1>
 												);
 											},
-											h2: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h2: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h2
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h2>
 												);
 											},
-											h3: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h3: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h3
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h3>
 												);
 											},
-											h4: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h4: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h4
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h4>
 												);
 											},
-											h5: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h5: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h5
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h5>
 												);
 											},
-											h6: ({ children }) => {
-												const text = String(children);
-												const id = text
-													.toLowerCase()
-													.replace(/[^\w\s-]/g, "")
-													.replace(/\s+/g, "-");
+											h6: ({ children, node }) => {
+												const id = slugifyHeading(String(children));
 												return (
 													<h6
-														id={id}
+														id={
+															headingIdsByLine.get(node?.position?.start.line ?? -1) ?? id
+														}
+														tabIndex={-1}
 													>
 														{children}
 													</h6>
@@ -1290,6 +1326,7 @@ export function App() {
 									>
 										{parsed.body}
 										</ReactMarkdown>
+										</div>
 									</div>
 								</article>
 							)}
