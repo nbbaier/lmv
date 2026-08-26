@@ -1258,7 +1258,7 @@ export function App() {
 					{showSidebar && (
 						<div
 							data-focus-chrome
-							className="focus-sidebar-shell flex-shrink-0"
+							className="focus-sidebar-shell flex min-h-0 flex-shrink-0"
 							style={
 								!isMobile && sidebarVisible
 									? {
