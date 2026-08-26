@@ -18,6 +18,7 @@ export type StartServerConfig = {
 	inputs: string[];
 	recursive: boolean;
 	includeHidden: boolean;
+	includeIgnored: boolean;
 };
 
 type ApiFile = {
@@ -127,6 +128,7 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 				cwd: config.cwd,
 				recursive: config.recursive,
 				includeHidden: config.includeHidden,
+				includeIgnored: config.includeIgnored,
 				strict: false,
 			});
 			allowedFiles = buildAllowedFiles(config.cwd, discovered);

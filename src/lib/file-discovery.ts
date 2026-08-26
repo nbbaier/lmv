@@ -5,6 +5,7 @@ type DiscoverOptions = {
 	cwd: string;
 	recursive: boolean;
 	includeHidden: boolean;
+	includeIgnored: boolean;
 	strict?: boolean;
 };
 
@@ -76,8 +77,13 @@ function uniqueInOrder(paths: string[]) {
 	return out;
 }
 
-async function filterGitIgnored(absolutePaths: string[], cwd: string) {
+async function filterGitIgnored(
+	absolutePaths: string[],
+	cwd: string,
+	includeIgnored: boolean,
+) {
 	if (absolutePaths.length === 0) return absolutePaths;
+	if (includeIgnored) return absolutePaths;
 	if (!Bun.which("git")) return absolutePaths;
 
 	const toplevel = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
@@ -166,6 +172,10 @@ export async function discoverMarkdownFiles(
 		}
 	}
 
-	const filtered = await filterGitIgnored(Array.from(discovered), options.cwd);
+	const filtered = await filterGitIgnored(
+		Array.from(discovered),
+		options.cwd,
+		options.includeIgnored,
+	);
 	return uniqueInOrder(filtered);
 }

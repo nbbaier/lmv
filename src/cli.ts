@@ -18,9 +18,10 @@ Usage:
 Options:
   -p, --port <number>     Port to run server on (default: 3000)
   -h, --help              Show this help message
+  -r, --recursive         Recurse into directories (directory inputs only)
   --no-open               Don't auto-open browser
-  --recursive             Recurse into directories (directory inputs only)
   --hidden                Include hidden files/folders (directory inputs only)
+  --ignored               Include files ignored by git
 
 Environment:
   GITHUB_TOKEN            Enable "Share as Gist" feature
@@ -47,6 +48,7 @@ async function main() {
 	let autoOpen = true;
 	let recursive = false;
 	let includeHidden = false;
+	let includeIgnored = false;
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -67,6 +69,8 @@ async function main() {
 			recursive = true;
 		} else if (arg === "--hidden") {
 			includeHidden = true;
+		} else if (arg === "--ignored") {
+			includeIgnored = true;
 		} else if (arg && !arg.startsWith("-")) {
 			inputs.push(arg);
 		} else {
@@ -88,6 +92,7 @@ async function main() {
 			cwd: process.cwd(),
 			recursive,
 			includeHidden,
+			includeIgnored,
 		});
 	} catch (error) {
 		console.error(
@@ -109,6 +114,7 @@ async function main() {
 			inputs,
 			recursive,
 			includeHidden,
+			includeIgnored,
 		},
 		port,
 	);

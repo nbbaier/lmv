@@ -46,6 +46,7 @@ describe("file API", () => {
 				inputs: ["."],
 				recursive: false,
 				includeHidden: false,
+				includeIgnored: false,
 			},
 			0,
 		);
@@ -95,6 +96,7 @@ describe("file API", () => {
 				inputs: ["ordinary.md", "link.md", "broken.md"],
 				recursive: false,
 				includeHidden: false,
+				includeIgnored: false,
 			},
 			0,
 		);
