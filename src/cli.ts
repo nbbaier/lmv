@@ -37,11 +37,14 @@ Examples:
 
 async function main() {
 	const rawArgs = process.argv.slice(2);
-	if (
-		rawArgs.length === 0 ||
-		rawArgs.includes("-h") ||
-		rawArgs.includes("--help")
-	) {
+	if (rawArgs.length === 0) {
+		printHelp();
+		process.exit(0);
+	}
+
+	const terminatorIndex = rawArgs.indexOf("--");
+	const flagArgs = terminatorIndex === -1 ? rawArgs : rawArgs.slice(0, terminatorIndex);
+	if (flagArgs.includes("-h") || flagArgs.includes("--help")) {
 		printHelp();
 		process.exit(0);
 	}
