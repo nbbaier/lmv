@@ -105,6 +105,34 @@
         container-type: inline-size;
       }
 
+      .focus-topbar {
+        transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease;
+      }
+
+      .focus-sidebar-shell {
+        min-width: 0;
+        transition: width 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease;
+      }
+
+      .focus-sidebar-shell > * {
+        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .focus-mode .focus-topbar {
+        transform: translateY(-100%);
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .focus-mode .focus-sidebar-shell {
+        width: 0 !important;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .focus-mode .focus-sidebar-shell > * { transform: translateX(-100%); }
+
       .document-reading-layout {
         display: grid;
         min-width: 0;
@@ -237,6 +265,17 @@
           scrollbar-gutter: stable;
         }
       }
+
+      .focus-mode .document-container--with-rail { max-width: 54rem; }
+      .focus-mode .document-reading-layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+          "frontmatter"
+          "document";
+        column-gap: 0;
+      }
+      .focus-mode .document-toc-compact,
+      .focus-mode .document-rail { display: none; }
 
       .markdown-body {
         width: 100%;
@@ -475,6 +514,12 @@
         .markdown-code-block,
         .markdown-table-container,
         .mermaid-diagram { border-radius: 6px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .focus-topbar,
+        .focus-sidebar-shell,
+        .focus-sidebar-shell > * { transition: none; }
       }
 
       @media (forced-colors: active) {

@@ -41,6 +41,7 @@ lmv README.md --no-open
 - **Markdown rendering** with GFM support (tables, task lists, strikethrough)
 - **Syntax highlighting** for common web, scripting, and systems languages
 - **Dark/Light/System theme** toggle
+- **Focus mode** for distraction-free reading (`F`, then `F` or `Escape` to exit)
 - **Edit mode** with live preview toggle (Cmd+E)
 - **Save to disk** (Cmd+S)
 - **Share as GitHub Gist** (requires `GITHUB_TOKEN`)
@@ -49,8 +50,19 @@ lmv README.md --no-open
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+E` | Toggle edit mode |
-| `Cmd+S` | Save changes |
+| `F` | Enter or exit focus mode while reading |
+| `Escape` | Exit focus mode |
+| `Cmd/Ctrl+B` | Toggle the file browser |
+| `Cmd/Ctrl+K` or `/` | Search files |
+| `Cmd/Ctrl+E` | Toggle edit mode |
+| `Cmd/Ctrl+S` | Save changes |
+
+Focus mode is deliberately read-only: entering it hides the top bar, file browser,
+and table of contents while preserving the document's readable measure. Switching
+to edit mode or opening file search exits focus mode. The setting lasts only for
+the current page session, so reopening LMV always restores the normal shell; the
+file browser's collapsed/open and resized state is preserved while focus mode is
+active.
 
 ## GitHub Gist Sharing
 
