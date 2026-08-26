@@ -49,7 +49,7 @@ async function main() {
 		process.exit(0);
 	}
 
-	let config;
+	let config: ReturnType<typeof parseCliArgs>;
 	try {
 		config = parseCliArgs(rawArgs);
 	} catch (error) {
