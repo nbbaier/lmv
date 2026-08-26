@@ -5,6 +5,11 @@
    <meta charset="UTF-8" />
    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
    <title>Local Markdown Viewer</title>
+   <link rel="preconnect" href="https://fonts.googleapis.com" />
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+   <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet" />
    <script src="https://cdn.tailwindcss.com"></script>
    <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
@@ -14,27 +19,31 @@
          theme: {
             extend: {
                colors: {
-                  border: 'hsl(var(--border))',
-                  input: 'hsl(var(--input))',
-                  ring: 'hsl(var(--ring))',
-                  background: 'hsl(var(--background))',
-                  foreground: 'hsl(var(--foreground))',
+                  border: 'hsl(var(--border) / <alpha-value>)',
+                  input: 'hsl(var(--input) / <alpha-value>)',
+                  ring: 'hsl(var(--ring) / <alpha-value>)',
+                  background: 'hsl(var(--background) / <alpha-value>)',
+                  foreground: 'hsl(var(--foreground) / <alpha-value>)',
                   primary: {
-                     DEFAULT: 'hsl(var(--primary))',
-                     foreground: 'hsl(var(--primary-foreground))',
+                     DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
+                     foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
                   },
                   secondary: {
-                     DEFAULT: 'hsl(var(--secondary))',
-                     foreground: 'hsl(var(--secondary-foreground))',
+                     DEFAULT: 'hsl(var(--secondary) / <alpha-value>)',
+                     foreground: 'hsl(var(--secondary-foreground) / <alpha-value>)',
                   },
                   muted: {
-                     DEFAULT: 'hsl(var(--muted))',
-                     foreground: 'hsl(var(--muted-foreground))',
+                     DEFAULT: 'hsl(var(--muted) / <alpha-value>)',
+                     foreground: 'hsl(var(--muted-foreground) / <alpha-value>)',
                   },
                   accent: {
-                     DEFAULT: 'hsl(var(--accent))',
-                     foreground: 'hsl(var(--accent-foreground))',
+                     DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+                     foreground: 'hsl(var(--accent-foreground) / <alpha-value>)',
                   },
+               },
+               fontFamily: {
+                  sans: ['var(--font-sans)'],
+                  mono: ['var(--font-mono)'],
                },
             },
          },
@@ -43,37 +52,290 @@
    <style type="text/tailwindcss">
       @layer base {
         :root {
-          --background: 0 0% 100%;
-          --foreground: 240 10% 3.9%;
-          --primary: 240 5.9% 10%;
-          --primary-foreground: 0 0% 98%;
-          --secondary: 240 4.8% 95.9%;
-          --secondary-foreground: 240 5.9% 10%;
-          --muted: 240 4.8% 95.9%;
-          --muted-foreground: 240 3.8% 46.1%;
-          --accent: 240 4.8% 95.9%;
-          --accent-foreground: 240 5.9% 10%;
-          --border: 240 5.9% 90%;
-          --input: 240 5.9% 90%;
-          --ring: 240 5.9% 10%;
+          --background: 38 35% 98%;
+          --foreground: 32 15% 14%;
+          --primary: 31 14% 16%;
+          --primary-foreground: 40 40% 98%;
+          --secondary: 36 24% 94%;
+          --secondary-foreground: 31 14% 18%;
+          --muted: 36 22% 94%;
+          --muted-foreground: 30 7% 43%;
+          --accent: 35 25% 91%;
+          --accent-foreground: 31 15% 17%;
+          --border: 34 16% 86%;
+          --input: 34 16% 82%;
+          --ring: 202 48% 42%;
+          --link: 204 55% 38%;
+          --font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+          --document-measure: 78ch;
+          color-scheme: light;
         }
         .dark {
-          --background: 240 10% 3.9%;
-          --foreground: 0 0% 98%;
-          --primary: 0 0% 98%;
-          --primary-foreground: 240 5.9% 10%;
-          --secondary: 240 3.7% 15.9%;
-          --secondary-foreground: 0 0% 98%;
-          --muted: 240 3.7% 15.9%;
-          --muted-foreground: 240 5% 64.9%;
-          --accent: 240 3.7% 15.9%;
-          --accent-foreground: 0 0% 98%;
-          --border: 240 3.7% 15.9%;
-          --input: 240 3.7% 15.9%;
-          --ring: 240 4.9% 83.9%;
+          --background: 30 10% 9%;
+          --foreground: 36 17% 90%;
+          --primary: 38 20% 92%;
+          --primary-foreground: 30 13% 12%;
+          --secondary: 30 8% 15%;
+          --secondary-foreground: 36 16% 90%;
+          --muted: 30 8% 15%;
+          --muted-foreground: 32 8% 63%;
+          --accent: 30 8% 18%;
+          --accent-foreground: 36 16% 92%;
+          --border: 30 7% 22%;
+          --input: 30 7% 28%;
+          --ring: 198 45% 66%;
+          --link: 198 56% 68%;
+          color-scheme: dark;
         }
         * { @apply border-border; }
-        body { @apply bg-background text-foreground antialiased; }
+        html { font-family: var(--font-sans); }
+        body { @apply bg-background text-foreground antialiased; min-height: 100vh; }
+        button, input, textarea, select { font: inherit; }
+        ::selection { background: hsl(var(--ring) / 0.22); }
+      }
+
+      .document-container {
+        width: 100%;
+        max-width: 54rem;
+      }
+
+      .markdown-body {
+        width: 100%;
+        max-width: var(--document-measure);
+        margin-inline: auto;
+        color: hsl(var(--foreground));
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.7;
+        overflow-wrap: break-word;
+        hanging-punctuation: first last;
+      }
+
+      .markdown-content > :first-child { margin-top: 0; }
+      .markdown-content > :last-child { margin-bottom: 0; }
+
+      .markdown-content :where(h1, h2, h3, h4, h5, h6) {
+        color: hsl(var(--foreground));
+        font-family: var(--font-sans);
+        font-weight: 600;
+        line-height: 1.22;
+        letter-spacing: -0.018em;
+        scroll-margin-top: 5rem;
+      }
+
+      .markdown-content h1 {
+        margin: 0 0 0.85em;
+        padding-bottom: 0.35em;
+        border-bottom: 1px solid hsl(var(--border));
+        font-size: 2rem;
+        letter-spacing: -0.028em;
+      }
+
+      .markdown-content h2 {
+        margin: 2.1em 0 0.7em;
+        padding-bottom: 0.28em;
+        border-bottom: 1px solid hsl(var(--border));
+        font-size: 1.5rem;
+      }
+
+      .markdown-content h3 { margin: 1.9em 0 0.6em; font-size: 1.25rem; }
+      .markdown-content h4 { margin: 1.7em 0 0.5em; font-size: 1.05rem; }
+      .markdown-content h5,
+      .markdown-content h6 {
+        margin: 1.6em 0 0.45em;
+        color: hsl(var(--muted-foreground));
+        font-size: 0.95rem;
+      }
+      .markdown-content h6 { text-transform: uppercase; letter-spacing: 0.045em; }
+
+      .markdown-content p { margin: 1em 0; }
+      .markdown-content strong { font-weight: 600; }
+      .markdown-content del { color: hsl(var(--muted-foreground)); }
+
+      .markdown-content a {
+        color: hsl(var(--link));
+        font-weight: 500;
+        text-decoration-line: underline;
+        text-decoration-color: hsl(var(--link) / 0.38);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.2em;
+        transition: text-decoration-color 150ms ease;
+      }
+      .markdown-content a:hover { text-decoration-color: currentColor; }
+      .markdown-content a:focus-visible {
+        border-radius: 2px;
+        outline: 2px solid hsl(var(--ring));
+        outline-offset: 3px;
+      }
+
+      .markdown-content :where(ul, ol) {
+        margin: 1em 0;
+        padding-left: 0;
+        list-style-position: outside;
+      }
+      .markdown-content ul { list-style-type: disc; }
+      .markdown-content ol { list-style-type: decimal; }
+      .markdown-content li > :where(ul, ol) { margin: 0.35em 0; padding-left: 1.45em; }
+      .markdown-content li + li { margin-top: 0.32em; }
+      .markdown-content li::marker { color: hsl(var(--muted-foreground)); }
+      .markdown-content li > p { margin: 0.35em 0; }
+      .markdown-content li:has(> input[type="checkbox"]) { list-style: none; }
+
+      .markdown-content blockquote {
+        margin: 1.25em 0;
+        padding: 0.55em 1em;
+        border-left: 2px solid hsl(var(--link));
+        background: hsl(var(--muted) / 0.35);
+        color: hsl(var(--muted-foreground));
+        font-style: italic;
+      }
+      .markdown-content blockquote > :first-child { margin-top: 0; }
+      .markdown-content blockquote > :last-child { margin-bottom: 0; }
+      .markdown-content blockquote blockquote {
+        margin: 0.65em 0;
+        border-left-color: hsl(var(--link) / 0.45);
+        background: transparent;
+      }
+
+      .markdown-content :not(pre) > code {
+        border: 1px solid hsl(var(--border) / 0.8);
+        border-radius: 4px;
+        background: hsl(var(--muted) / 0.8);
+        padding: 0.08em 0.38em;
+        font-family: var(--font-mono);
+        font-size: 0.86em;
+        font-weight: 500;
+      }
+
+      .markdown-code-block {
+        margin: 1.5em 0;
+        overflow-x: auto;
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        background: #0d1117;
+        color: #c9d1d9;
+        padding: 14px 18px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.6;
+        tab-size: 2;
+      }
+      .markdown-code-block code { display: block; min-width: max-content; font-family: inherit; }
+      .markdown-code-block .hljs { overflow: visible; background: transparent; padding: 0; }
+
+      .markdown-table-container {
+        margin: 1.5em 0;
+        overflow-x: auto;
+        border: 1px solid hsl(var(--border));
+        border-radius: 8px;
+      }
+      .markdown-content table {
+        width: max-content;
+        min-width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .markdown-content :where(th, td) {
+        padding: 0.6em 1em;
+        border-bottom: 1px solid hsl(var(--border));
+        text-align: left;
+        vertical-align: top;
+      }
+      .markdown-content th {
+        background: hsl(var(--muted) / 0.58);
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.035em;
+        text-transform: uppercase;
+      }
+      .markdown-content tbody tr:last-child td { border-bottom: 0; }
+      .markdown-content tbody tr { transition: background-color 120ms ease; }
+      .markdown-content tbody tr:hover { background: hsl(var(--muted) / 0.35); }
+      .markdown-content :where(th, td) > :first-child { margin-top: 0; }
+      .markdown-content :where(th, td) > :last-child { margin-bottom: 0; }
+
+      .markdown-task-checkbox {
+        width: 14px;
+        height: 14px;
+        margin: 0 0.45em 0 0;
+        vertical-align: -2px;
+        appearance: none;
+        border: 1px solid hsl(var(--muted-foreground) / 0.7);
+        border-radius: 3px;
+        background: hsl(var(--background));
+        opacity: 1;
+      }
+      .markdown-task-checkbox:checked {
+        border-color: hsl(var(--link));
+        background-color: hsl(var(--link));
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 14 14' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m3.2 7.2 2.3 2.3 5.2-5.2' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      }
+
+      .markdown-content img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 1.5em auto;
+        border: 1px solid hsl(var(--border));
+        border-radius: 8px;
+        background: hsl(var(--muted) / 0.35);
+      }
+
+      .markdown-content hr {
+        width: 6rem;
+        height: 1px;
+        margin: 2.5em auto;
+        border: 0;
+        background: hsl(var(--border));
+      }
+
+      .mermaid-diagram {
+        margin: 1.5em 0;
+        overflow-x: auto;
+        border: 1px solid hsl(var(--border));
+        border-radius: 10px;
+        background: hsl(var(--muted) / 0.28);
+        padding: 1.25em;
+      }
+      .mermaid-diagram svg {
+        display: block;
+        width: auto;
+        max-width: none;
+        height: auto;
+        margin: 0 auto;
+      }
+      .mermaid-status { margin: 1.5em 0; color: hsl(var(--muted-foreground)); text-align: center; }
+      .mermaid-error {
+        margin: 1.5em 0;
+        overflow-x: auto;
+        border: 1px solid hsl(0 45% 36%);
+        border-radius: 8px;
+        background: hsl(0 35% 14%);
+        color: hsl(0 65% 78%);
+        padding: 1em;
+        font: 13px/1.6 var(--font-mono);
+      }
+
+      @media (min-width: 640px) {
+        .markdown-content > blockquote { margin-inline: -0.75rem; }
+        .markdown-code-block,
+        .mermaid-diagram { margin-inline: -1.125rem; }
+        .markdown-table-container { margin-inline: -0.875rem; }
+      }
+
+      @media (max-width: 639px) {
+        .markdown-content h1 { font-size: 1.75rem; }
+        .markdown-content h2 { font-size: 1.35rem; }
+        .markdown-code-block,
+        .markdown-table-container,
+        .mermaid-diagram { border-radius: 6px; }
+      }
+
+      @media (forced-colors: active) {
+        .markdown-task-checkbox { appearance: auto; }
       }
     </style>
    <script>

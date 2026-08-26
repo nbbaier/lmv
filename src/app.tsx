@@ -15,7 +15,15 @@ import {
 	TimerOff,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	isValidElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import type { RenderOptions } from "beautiful-mermaid";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "./components/button";
@@ -35,6 +43,30 @@ import { rehypeHighlight } from "./lib/syntax-highlighting";
 import { cn } from "./lib/utils";
 
 type Theme = "light" | "dark" | "system";
+type ResolvedTheme = Exclude<Theme, "system">;
+
+const MERMAID_PALETTES: Record<ResolvedTheme, RenderOptions> = {
+	light: {
+		bg: "transparent",
+		fg: "#29241f",
+		line: "#928a80",
+		accent: "#3a718c",
+		border: "#b9b0a4",
+		surface: "#f3efe8",
+		muted: "#756e66",
+		font: "IBM Plex Sans",
+	},
+	dark: {
+		bg: "transparent",
+		fg: "#e9e3db",
+		line: "#817a72",
+		accent: "#79aec2",
+		border: "#6e6861",
+		surface: "#27231f",
+		muted: "#aaa39b",
+		font: "IBM Plex Sans",
+	},
+};
 
 type Toast = {
 	id: number;
@@ -61,9 +93,16 @@ function useToast() {
 	return { toasts, addToast, removeToast };
 }
 
-function MermaidDiagram({ chart }: { chart: string }) {
+function MermaidDiagram({
+	chart,
+	theme,
+}: {
+	chart: string;
+	theme: ResolvedTheme;
+}) {
 	const [result, setResult] = useState<{
 		chart: string;
+		theme: ResolvedTheme;
 		svg?: string;
 		error?: string;
 	}>();
@@ -73,37 +112,29 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
 		import("beautiful-mermaid")
 			.then(({ renderMermaidSVG }) => {
-				const rendered = renderMermaidSVG(chart, {
-					bg: "transparent",
-					fg: "#c9d1d9",
-					line: "#8b949e",
-					accent: "#58a6ff",
-					border: "#58a6ff",
-					surface: "#161b22",
-					muted: "#8b949e",
-				});
-				if (!cancelled) setResult({ chart, svg: rendered });
+				const rendered = renderMermaidSVG(chart, MERMAID_PALETTES[theme]);
+				if (!cancelled) setResult({ chart, theme, svg: rendered });
 			})
 			.catch((err: unknown) => {
-				if (!cancelled) setResult({ chart, error: String(err) });
+				if (!cancelled) setResult({ chart, theme, error: String(err) });
 			});
 
 		return () => {
 			cancelled = true;
 		};
-	}, [chart]);
+	}, [chart, theme]);
 
-	if (result?.chart === chart && result.error) {
+	if (result?.chart === chart && result.theme === theme && result.error) {
 		return (
-			<pre className="bg-red-950 text-red-300 rounded-lg p-4 my-4 text-sm overflow-x-auto">
+			<pre className="mermaid-error">
 				{result.error}
 			</pre>
 		);
 	}
 
-	if (result?.chart !== chart || !result.svg) {
+	if (result?.chart !== chart || result.theme !== theme || !result.svg) {
 		return (
-			<div className="my-4 flex justify-center text-sm text-muted-foreground">
+			<div className="mermaid-status">
 				Rendering diagram…
 			</div>
 		);
@@ -111,7 +142,9 @@ function MermaidDiagram({ chart }: { chart: string }) {
 
 	return (
 		<div
-			className="my-4 flex justify-center"
+			className="mermaid-diagram"
+			role="img"
+			aria-label="Mermaid diagram"
 			// biome-ignore lint/security/noDangerouslySetInnerHtml: beautiful-mermaid renders trusted SVG
 			dangerouslySetInnerHTML={{ __html: result.svg }}
 		/>
@@ -165,10 +198,17 @@ function ToastContainer({
 
 function useTheme() {
 	const [theme, setTheme] = useState<Theme>("system");
+	const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() =>
+		window.matchMedia("(prefers-color-scheme: dark)").matches
+			? "dark"
+			: "light",
+	);
 
 	useEffect(() => {
-		const stored = localStorage.getItem("lmv-theme") as Theme | null;
-		if (stored) setTheme(stored);
+		const stored = localStorage.getItem("lmv-theme");
+		if (stored === "light" || stored === "dark" || stored === "system") {
+			setTheme(stored);
+		}
 	}, []);
 
 	useEffect(() => {
@@ -178,28 +218,25 @@ function useTheme() {
 		root.classList.remove("light", "dark");
 
 		if (theme === "system") {
-			const systemDark = window.matchMedia(
-				"(prefers-color-scheme: dark)",
-			).matches;
-			root.classList.add(systemDark ? "dark" : "light");
+			root.classList.add(systemTheme);
 		} else {
 			root.classList.add(theme);
 		}
-	}, [theme]);
+	}, [theme, systemTheme]);
 
 	useEffect(() => {
-		if (theme !== "system") return;
-
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const handler = (e: MediaQueryListEvent) => {
-			document.documentElement.classList.remove("light", "dark");
-			document.documentElement.classList.add(e.matches ? "dark" : "light");
-		};
+		const handler = (e: MediaQueryListEvent) =>
+			setSystemTheme(e.matches ? "dark" : "light");
 		media.addEventListener("change", handler);
 		return () => media.removeEventListener("change", handler);
-	}, [theme]);
+	}, []);
 
-	return { theme, setTheme };
+	return {
+		theme,
+		setTheme,
+		resolvedTheme: theme === "system" ? systemTheme : theme,
+	};
 }
 
 function useIsMobile() {
@@ -243,7 +280,7 @@ export function App() {
 		const stored = localStorage.getItem("lmv-autosave");
 		return stored !== null ? stored === "true" : true;
 	});
-	const { theme, setTheme } = useTheme();
+	const { theme, setTheme, resolvedTheme } = useTheme();
 	const { toasts, addToast, removeToast } = useToast();
 
 	const selectedPathRef = useRef<string | null>(null);
@@ -877,7 +914,7 @@ export function App() {
 
 					{/* Main content */}
 					<main className="flex-1 min-w-0 overflow-auto">
-						<div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+						<div className="document-container mx-auto px-5 py-10 sm:px-8 sm:py-12">
 							{!selectedPath ? (
 								<div className="text-muted-foreground text-sm">
 									Select a file to view
@@ -893,12 +930,13 @@ export function App() {
 									/>
 								</div>
 							) : (
-								<article className="prose prose-neutral dark:prose-invert max-w-none">
+								<article className="markdown-body">
 									{parsed.frontmatter && (
 										<FrontmatterDisplay frontmatter={parsed.frontmatter} />
 									)}
 									<TableOfContents markdown={parsed.body} />
-									<ReactMarkdown
+									<div className="markdown-content">
+										<ReactMarkdown
 										remarkPlugins={[remarkGfm]}
 										rehypePlugins={[rehypeHighlight]}
 										components={{
@@ -911,7 +949,6 @@ export function App() {
 												return (
 													<h1
 														id={id}
-														className="text-3xl font-bold mt-0 mb-4 pb-2 border-b border-border scroll-mt-20"
 													>
 														{children}
 													</h1>
@@ -926,7 +963,6 @@ export function App() {
 												return (
 													<h2
 														id={id}
-														className="text-2xl font-semibold mt-8 mb-4 pb-1 border-b border-border scroll-mt-20"
 													>
 														{children}
 													</h2>
@@ -941,7 +977,6 @@ export function App() {
 												return (
 													<h3
 														id={id}
-														className="text-xl font-semibold mt-6 mb-3 scroll-mt-20"
 													>
 														{children}
 													</h3>
@@ -956,7 +991,6 @@ export function App() {
 												return (
 													<h4
 														id={id}
-														className="text-lg font-semibold mt-5 mb-2 scroll-mt-20"
 													>
 														{children}
 													</h4>
@@ -971,7 +1005,6 @@ export function App() {
 												return (
 													<h5
 														id={id}
-														className="text-base font-semibold mt-4 mb-2 scroll-mt-20"
 													>
 														{children}
 													</h5>
@@ -986,69 +1019,27 @@ export function App() {
 												return (
 													<h6
 														id={id}
-														className="text-sm font-semibold mt-4 mb-2 scroll-mt-20"
 													>
 														{children}
 													</h6>
 												);
 											},
-											p: ({ children }) => (
-												<p className="my-4 leading-7">{children}</p>
-											),
-											a: ({ href, children }) => (
-												<a
-													href={href}
-													className="text-blue-600 dark:text-blue-400 underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300"
-												>
-													{children}
-												</a>
-											),
-											ul: ({ children }) => (
-												<ul className="my-4 ml-6 list-disc space-y-1">
-													{children}
-												</ul>
-											),
-											ol: ({ children }) => (
-												<ol className="my-4 ml-6 list-decimal space-y-1">
-													{children}
-												</ol>
-											),
-											li: ({ children }) => (
-												<li className="leading-7">{children}</li>
-											),
-											blockquote: ({ children }) => (
-												<blockquote className="border-l-4 border-muted-foreground/30 pl-4 my-4 italic text-muted-foreground">
-													{children}
-												</blockquote>
-											),
 											code: ({ className, children, node, ...props }) => {
 												const isBlock =
 													node?.position &&
 													node.position.start.line !== node.position.end.line;
 												if (!isBlock) {
 													return (
-														<code
-															className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
-															{...props}
-														>
+														<code {...props}>
 															{children}
 														</code>
 													);
 												}
 												if (className?.includes("language-mermaid")) {
-													// Extract raw text from AST to avoid highlight.js spans
-													const extractText = (n: any): string => {
-														if (!n) return "";
-														if (typeof n === "string") return n;
-														if (n.value) return n.value;
-														if (n.children)
-															return n.children.map(extractText).join("");
-														return String(n);
-													};
-													const raw = node
-														? extractText(node)
-														: String(children).replace(/\n$/, "");
-													return <MermaidDiagram chart={raw} />;
+													const raw = String(children).replace(/\n$/, "");
+													return (
+														<MermaidDiagram chart={raw} theme={resolvedTheme} />
+													);
 												}
 												return (
 													<code className={className} {...props}>
@@ -1061,37 +1052,24 @@ export function App() {
 												const child = Array.isArray(children)
 													? children[0]
 													: children;
-												if (
-													child &&
-													typeof child === "object" &&
-													"type" in child &&
-													child.type === MermaidDiagram
-												) {
+												const isMermaid =
+													isValidElement<{ className?: string }>(child) &&
+													child.props.className?.includes("language-mermaid");
+												if (isMermaid) {
 													return <>{children}</>;
 												}
 												return (
-													<pre className="bg-[#0d1117] text-[#c9d1d9] rounded-lg p-4 my-4 overflow-x-auto text-sm">
+													<pre className="markdown-code-block">
 														{children}
 													</pre>
 												);
 											},
-											hr: () => <hr className="my-8 border-border" />,
 											table: ({ children }) => (
-												<div className="my-4 overflow-x-auto">
-													<table className="w-full border-collapse">
+												<div className="markdown-table-container">
+													<table>
 														{children}
 													</table>
 												</div>
-											),
-											th: ({ children }) => (
-												<th className="border border-border bg-muted px-4 py-2 text-left font-semibold">
-													{children}
-												</th>
-											),
-											td: ({ children }) => (
-												<td className="border border-border px-4 py-2">
-													{children}
-												</td>
 											),
 											input: (props) => {
 												if (props.type === "checkbox") {
@@ -1100,23 +1078,17 @@ export function App() {
 															type="checkbox"
 															checked={props.checked}
 															disabled
-															className="mr-2 h-4 w-4 accent-primary"
+															className="markdown-task-checkbox"
 														/>
 													);
 												}
 												return <input {...props} />;
 											},
-											img: ({ src, alt }) => (
-												<img
-													src={src}
-													alt={alt}
-													className="max-w-full h-auto rounded-lg my-4"
-												/>
-											),
 										}}
 									>
 										{parsed.body}
-									</ReactMarkdown>
+										</ReactMarkdown>
+									</div>
 								</article>
 							)}
 						</div>

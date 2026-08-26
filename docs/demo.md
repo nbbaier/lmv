@@ -77,6 +77,15 @@ npm run build
 echo "Done!"
 ```
 
+## Mermaid Diagrams
+
+```mermaid
+flowchart LR
+  Markdown --> Parse
+  Parse --> Render
+  Render --> Review
+```
+
 ## Blockquotes
 
 > This is a blockquote.
