@@ -1,119 +1,254 @@
-import { ChevronDown, ChevronRight, List } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Button } from "./button";
+import { ChevronDown, List } from "lucide-react";
+import {
+	type MouseEvent,
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import {
+	type DocumentHeading,
+	findActiveHeadingId,
+} from "../lib/table-of-contents";
 import { cn } from "../lib/utils";
 
-type Heading = {
-	id: string;
-	text: string;
-	level: number;
+type TableOfContentsProps = {
+	headings: DocumentHeading[];
+	scrollContainerRef: RefObject<HTMLElement | null>;
 };
 
-function extractHeadings(markdown: string): Heading[] {
-	const headings: Heading[] = [];
-	const lines = markdown.split("\n");
+type TocLinksProps = {
+	headings: DocumentHeading[];
+	activeId: string;
+	onNavigate: (event: MouseEvent<HTMLAnchorElement>, id: string) => void;
+	activeLinkRef?: RefObject<HTMLAnchorElement | null>;
+};
 
-	for (const line of lines) {
-		const match = line.match(/^(#{1,6})\s+(.+)$/);
-		if (match && match[1] && match[2]) {
-			const level = match[1].length;
-			const text = match[2].trim();
-			const id = text
-				.toLowerCase()
-				.replace(/[^\w\s-]/g, "")
-				.replace(/\s+/g, "-");
-			headings.push({ id, text, level });
-		}
-	}
+function TocLinks({
+	headings,
+	activeId,
+	onNavigate,
+	activeLinkRef,
+}: TocLinksProps) {
+	const minLevel = useMemo(
+		() => Math.min(...headings.map(({ level }) => level)),
+		[headings],
+	);
 
-	return headings;
+	return (
+		<ul className="document-toc-list">
+			{headings.map((heading) => {
+				const isActive = activeId === heading.id;
+				const depth = Math.min(4, Math.max(0, heading.level - minLevel));
+				return (
+					<li key={heading.id} data-depth={depth}>
+						<a
+							ref={isActive ? activeLinkRef : undefined}
+							href={`#${encodeURIComponent(heading.id)}`}
+							onClick={(event) => onNavigate(event, heading.id)}
+							aria-current={isActive ? "location" : undefined}
+							title={heading.text}
+							className={cn("document-toc-link", isActive && "is-active")}
+						>
+							{heading.text}
+						</a>
+					</li>
+				);
+			})}
+		</ul>
+	);
 }
 
-export function TableOfContents({ markdown }: { markdown: string }) {
-	const [isOpen, setIsOpen] = useState(true);
-	const [activeId, setActiveId] = useState<string>("");
-
-	const headings = useMemo(() => extractHeadings(markdown), [markdown]);
+export function TableOfContents({
+	headings,
+	scrollContainerRef,
+}: TableOfContentsProps) {
+	const [activeId, setActiveId] = useState(headings[0]?.id ?? "");
+	const [compactOpen, setCompactOpen] = useState(false);
+	const [pendingCompactTarget, setPendingCompactTarget] = useState<string>();
+	const railRef = useRef<HTMLElement | null>(null);
+	const activeRailLinkRef = useRef<HTMLAnchorElement | null>(null);
 
 	useEffect(() => {
-		if (headings.length === 0) return;
-
-		const observer = new IntersectionObserver(
-			(entries) => {
-				for (const entry of entries) {
-					if (entry.isIntersecting) {
-						setActiveId(entry.target.id);
-					}
-				}
-			},
-			{
-				rootMargin: "-80px 0px -80% 0px",
-			},
-		);
-
-		const elements = headings
-			.map((h) => document.getElementById(h.id))
-			.filter((el): el is HTMLElement => el !== null);
-
-		for (const el of elements) {
-			observer.observe(el);
-		}
-
-		return () => observer.disconnect();
+		setActiveId(headings[0]?.id ?? "");
+		setCompactOpen(false);
+		setPendingCompactTarget(undefined);
 	}, [headings]);
+
+	useEffect(() => {
+		const scroller = scrollContainerRef.current;
+		if (!scroller || headings.length === 0) return;
+
+		let animationFrame = 0;
+		const update = () => {
+			animationFrame = 0;
+			const scrollerTop = scroller.getBoundingClientRect().top;
+			const positions = headings.flatMap(({ id }) => {
+				const element = document.getElementById(id);
+				if (!element || !scroller.contains(element)) return [];
+				return [
+					{
+						id,
+						top:
+							scroller.scrollTop +
+							element.getBoundingClientRect().top -
+							scrollerTop,
+					},
+				];
+			});
+			setActiveId(
+				findActiveHeadingId(
+					positions,
+					scroller.scrollTop,
+					Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+				),
+			);
+		};
+		const requestUpdate = () => {
+			if (animationFrame) return;
+			animationFrame = requestAnimationFrame(update);
+		};
+
+		scroller.addEventListener("scroll", requestUpdate, { passive: true });
+		const resizeObserver = new ResizeObserver(requestUpdate);
+		resizeObserver.observe(scroller);
+		const content = scroller.querySelector(".markdown-content");
+		if (content) resizeObserver.observe(content);
+		requestUpdate();
+
+		return () => {
+			scroller.removeEventListener("scroll", requestUpdate);
+			resizeObserver.disconnect();
+			if (animationFrame) cancelAnimationFrame(animationFrame);
+		};
+	}, [headings, scrollContainerRef]);
+
+	useEffect(() => {
+		const rail = railRef.current;
+		const link = activeRailLinkRef.current;
+		if (!rail || !link) return;
+		const railBounds = rail.getBoundingClientRect();
+		const linkBounds = link.getBoundingClientRect();
+		if (linkBounds.top < railBounds.top || linkBounds.bottom > railBounds.bottom) {
+			const reducedMotion = window.matchMedia(
+				"(prefers-reduced-motion: reduce)",
+			).matches;
+			rail.scrollTo({
+				top:
+					rail.scrollTop +
+					linkBounds.top -
+					railBounds.top -
+					rail.clientHeight / 3,
+				behavior: reducedMotion ? "auto" : "smooth",
+			});
+		}
+	}, [activeId]);
+
+	const scrollToHeading = useCallback(
+		(id: string, focus: boolean) => {
+			const scroller = scrollContainerRef.current;
+			const element = document.getElementById(id);
+			if (!scroller || !element || !scroller.contains(element)) return;
+
+			const top = Math.max(
+				0,
+				scroller.scrollTop +
+					element.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top -
+					24,
+			);
+			const reducedMotion = window.matchMedia(
+				"(prefers-reduced-motion: reduce)",
+			).matches;
+			scroller.scrollTo({
+				top,
+				behavior: reducedMotion ? "auto" : "smooth",
+			});
+			window.history.replaceState(null, "", `#${encodeURIComponent(id)}`);
+			setActiveId(id);
+			if (focus) element.focus({ preventScroll: true });
+		},
+		[scrollContainerRef],
+	);
+
+	useEffect(() => {
+		if (compactOpen || !pendingCompactTarget) return;
+		scrollToHeading(pendingCompactTarget, true);
+		setPendingCompactTarget(undefined);
+	}, [compactOpen, pendingCompactTarget, scrollToHeading]);
+
+	useEffect(() => {
+		let hash = window.location.hash.slice(1);
+		try {
+			hash = decodeURIComponent(hash);
+		} catch {
+			return;
+		}
+		if (!headings.some(({ id }) => id === hash)) return;
+		const animationFrame = requestAnimationFrame(() =>
+			scrollToHeading(hash, false),
+		);
+		return () => cancelAnimationFrame(animationFrame);
+	}, [headings, scrollToHeading]);
 
 	if (headings.length === 0) return null;
 
-	const handleClick = (id: string) => {
-		const element = document.getElementById(id);
-		if (element) {
-			element.scrollIntoView({ behavior: "smooth", block: "start" });
-		}
+	const handleNavigate = (
+		event: MouseEvent<HTMLAnchorElement>,
+		id: string,
+	) => {
+		event.preventDefault();
+		scrollToHeading(id, true);
 	};
 
 	return (
-		<nav className="mb-8 border border-border rounded-lg bg-muted/30">
-			<Button
-				variant="ghost"
-				onClick={() => setIsOpen(!isOpen)}
-				className="w-full justify-between p-4 hover:bg-muted"
+		<>
+			<details
+				className="document-toc-compact group"
+				open={compactOpen}
+				onToggle={(event) => setCompactOpen(event.currentTarget.open)}
 			>
-				<div className="flex items-center gap-2">
-					<List className="h-4 w-4" />
-					<span className="font-semibold">Table of Contents</span>
-				</div>
-				{isOpen ? (
-					<ChevronDown className="h-4 w-4" />
-				) : (
-					<ChevronRight className="h-4 w-4" />
-				)}
-			</Button>
+				<summary className="document-toc-summary">
+					<List aria-hidden="true" />
+					<span>On this page</span>
+					<span className="ml-auto text-[11px] font-normal text-muted-foreground">
+						{headings.length}
+					</span>
+					<ChevronDown
+						aria-hidden="true"
+						className="transition-transform group-open:rotate-180"
+					/>
+				</summary>
+				<nav aria-label="Table of contents" className="document-toc-compact-nav">
+					<TocLinks
+						headings={headings}
+						activeId={activeId}
+						onNavigate={(event, id) => {
+							event.preventDefault();
+							setPendingCompactTarget(id);
+							setCompactOpen(false);
+						}}
+					/>
+				</nav>
+			</details>
 
-			{isOpen && (
-				<div className="px-4 pb-4">
-					<ul className="space-y-1">
-						{headings.map((heading) => (
-							<li key={heading.id}>
-								<button
-									type="button"
-									onClick={() => handleClick(heading.id)}
-									className={cn(
-										"w-full text-left text-sm py-1 px-2 rounded hover:bg-muted transition-colors",
-										activeId === heading.id &&
-											"bg-muted font-medium text-foreground",
-										activeId !== heading.id && "text-muted-foreground",
-									)}
-									style={{
-										paddingLeft: `${(heading.level - 1) * 0.75 + 0.5}rem`,
-									}}
-								>
-									{heading.text}
-								</button>
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-		</nav>
+			<nav
+				ref={railRef}
+				className="document-rail"
+				aria-labelledby="document-rail-title"
+			>
+				<p id="document-rail-title" className="document-rail-title">
+					On this page
+				</p>
+				<TocLinks
+					headings={headings}
+					activeId={activeId}
+					onNavigate={handleNavigate}
+					activeLinkRef={activeRailLinkRef}
+				/>
+			</nav>
+		</>
 	);
 }

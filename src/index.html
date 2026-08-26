@@ -100,6 +100,144 @@
         max-width: 54rem;
       }
 
+      .document-scroller {
+        container-name: document;
+        container-type: inline-size;
+      }
+
+      .document-reading-layout {
+        display: grid;
+        min-width: 0;
+        grid-template-areas:
+          "frontmatter"
+          "toc"
+          "document";
+      }
+
+      .document-frontmatter {
+        grid-area: frontmatter;
+        width: 100%;
+        max-width: var(--document-measure);
+        margin-inline: auto;
+      }
+
+      .document-primary { grid-area: document; min-width: 0; }
+
+      .document-toc-compact {
+        grid-area: toc;
+        width: 100%;
+        max-width: var(--document-measure);
+        margin: 0 auto 2rem;
+        overflow: hidden;
+        border: 1px solid hsl(var(--border));
+        border-radius: 8px;
+        background: hsl(var(--muted) / 0.24);
+      }
+
+      .document-toc-summary {
+        display: flex;
+        min-width: 0;
+        cursor: pointer;
+        list-style: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.65rem 0.75rem;
+        color: hsl(var(--foreground));
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.055em;
+        text-transform: uppercase;
+        transition: background-color 150ms ease;
+      }
+      .document-toc-summary::-webkit-details-marker { display: none; }
+      .document-toc-summary:hover { background: hsl(var(--muted) / 0.7); }
+      .document-toc-summary:focus-visible {
+        outline: 2px solid hsl(var(--ring));
+        outline-offset: -2px;
+      }
+      .document-toc-summary svg { width: 14px; height: 14px; flex: none; }
+
+      .document-toc-compact-nav {
+        max-height: min(45dvh, 24rem);
+        overflow-y: auto;
+        border-top: 1px solid hsl(var(--border));
+        padding: 0.45rem;
+        overscroll-behavior: contain;
+      }
+
+      .document-rail { display: none; }
+      .document-rail-title {
+        margin: 0 0 0.6rem;
+        color: hsl(var(--muted-foreground));
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .document-toc-list { margin: 0; padding: 0; list-style: none; }
+      .document-toc-link {
+        display: block;
+        min-width: 0;
+        border-left: 2px solid transparent;
+        padding: 0.32rem 0.5rem 0.32rem 0.7rem;
+        color: hsl(var(--muted-foreground));
+        font-size: 12.5px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+        text-decoration: none;
+        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+      }
+      .document-toc-link:hover {
+        border-left-color: hsl(var(--border));
+        background: hsl(var(--muted) / 0.48);
+        color: hsl(var(--foreground));
+      }
+      .document-toc-link:focus-visible {
+        border-left-color: hsl(var(--ring));
+        background: hsl(var(--ring) / 0.08);
+        color: hsl(var(--foreground));
+        outline: 2px solid hsl(var(--ring));
+        outline-offset: -2px;
+      }
+      .document-toc-link.is-active {
+        border-left-color: hsl(var(--foreground) / 0.65);
+        color: hsl(var(--foreground));
+        font-weight: 500;
+      }
+      .document-toc-list [data-depth="1"] .document-toc-link { padding-left: 1.35rem; }
+      .document-toc-list [data-depth="2"] .document-toc-link { padding-left: 2rem; font-size: 12px; }
+      .document-toc-list [data-depth="3"] .document-toc-link,
+      .document-toc-list [data-depth="4"] .document-toc-link { padding-left: 2.65rem; font-size: 11.5px; }
+
+      @container document (min-width: 62rem) {
+        .document-container--with-rail { max-width: 76rem; }
+        .document-reading-layout {
+          grid-template-columns: minmax(0, 1fr) 15rem;
+          grid-template-areas:
+            "frontmatter rail"
+            "toc rail"
+            "document rail";
+          column-gap: 3rem;
+          align-items: start;
+        }
+        .document-toc-compact { display: none; }
+        .document-rail {
+          display: block;
+          grid-area: rail;
+          position: sticky;
+          top: 2rem;
+          align-self: start;
+          max-height: calc(100dvh - 7.25rem);
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          padding-right: 0.25rem;
+          scrollbar-gutter: stable;
+        }
+      }
+
       .markdown-body {
         width: 100%;
         max-width: var(--document-measure);
@@ -121,7 +259,12 @@
         font-weight: 600;
         line-height: 1.22;
         letter-spacing: -0.018em;
-        scroll-margin-top: 5rem;
+        scroll-margin-top: 1.5rem;
+      }
+      .markdown-content :where(h1, h2, h3, h4, h5, h6):focus-visible {
+        border-radius: 2px;
+        outline: 2px solid hsl(var(--ring));
+        outline-offset: 4px;
       }
 
       .markdown-content h1 {
