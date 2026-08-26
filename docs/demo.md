@@ -99,8 +99,8 @@ flowchart LR
 |---------|--------|-------|
 | Syntax Highlighting | Done | Uses highlight.js |
 | Dark Mode | Done | System preference |
-| Edit Mode | Done | Toggle with Cmd+E |
-| Save | Done | Cmd+S to save |
+| Mermaid | Done | Rendered as SVG |
+| Source handling | Read-only | LMV does not modify this file |
 
 ## Horizontal Rule
 
@@ -112,4 +112,4 @@ Some special characters: &copy; &reg; &trade; &rarr; &larr;
 
 ## Conclusion
 
-That's all the markdown features! Try editing this file by clicking the pencil icon or pressing `Cmd+E`.
+That's all the markdown features! Try focus mode with `F`, or switch themes from the toolbar.

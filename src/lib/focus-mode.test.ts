@@ -31,7 +31,7 @@ describe("focus mode keyboard shortcuts", () => {
 		).toBe("exit");
 	});
 
-	test("does not enter while editing text or without a readable document", () => {
+	test("does not enter from an editable control or without a selected document", () => {
 		expect(
 			getFocusModeShortcutAction({
 				...baseShortcut,

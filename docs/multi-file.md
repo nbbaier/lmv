@@ -78,8 +78,7 @@ User-selectable sort options (dropdown in sidebar header):
 - **Clickable breadcrumb**: Clicking a folder scrolls to and expands it in the sidebar
 
 ### File Switching
-- **Auto-save on switch**: Automatically save any pending edits before switching files
-- No confirmation dialogs needed
+- **Immediate selection**: Selecting a file switches to it without save or confirmation behavior
 
 ---
 
@@ -87,7 +86,7 @@ User-selectable sort options (dropdown in sidebar header):
 
 ### Content Changes
 - **Watch for external changes**: Detect when files are modified outside the app
-- **Prompt before reload**: Ask user before reloading changed content (in case they have edits)
+- **Automatic reload**: Reload the selected document from disk when it changes
 
 ### New Files
 - **Detect new files**: Watch directory for new markdown files
@@ -106,10 +105,10 @@ User-selectable sort options (dropdown in sidebar header):
 - **Current file only**: Share button creates gist of the currently viewed file
 - Behavior unchanged from single-file mode
 
-### Edit Mode
-- Works exactly as before on the currently selected file
-- **Cmd/Ctrl + E** to toggle edit mode
-- **Cmd/Ctrl + S** to save
+### Viewer-Only Source Handling
+- Opened Markdown source files are never modified by LMV
+- Gist sharing uses the currently loaded disk content
+- Stale `lmv-autosave` localStorage values are ignored
 
 ### Themes
 - Light/Dark/System toggle unchanged
@@ -122,8 +121,6 @@ User-selectable sort options (dropdown in sidebar header):
 | Shortcut | Action |
 |----------|--------|
 | Cmd/Ctrl + B | Toggle sidebar visibility |
-| Cmd/Ctrl + E | Toggle edit mode |
-| Cmd/Ctrl + S | Save current file |
 | Cmd/Ctrl + K or `/` | Focus file search |
 | Arrow Up/Down | Navigate file list (when sidebar focused) |
 | Enter | Open selected file |
@@ -134,8 +131,8 @@ User-selectable sort options (dropdown in sidebar header):
 
 ### API Endpoints (New/Modified)
 - `GET /api/files` - List all discovered markdown files with metadata
-- `GET /api/file?path=<relativePath>` - Read specific file (modify existing)
-- `PUT /api/file?path=<relativePath>` - Save specific file (modify existing)
+- `GET /api/file?path=<relativePath>` - Read a specific allowlisted file
+- `PUT /api/file` is not supported; source files cannot be written through LMV
 - WebSocket or SSE for file watch notifications
 
 ### State Management
@@ -162,6 +159,7 @@ User-selectable sort options (dropdown in sidebar header):
 ## Out of Scope
 
 - File creation, deletion, or renaming within the app
+- Any modification of opened Markdown source files
 - Multi-file gist sharing
 - Content search across files
 - Tabs for multiple open files

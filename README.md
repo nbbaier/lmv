@@ -1,6 +1,6 @@
 # lmv - Local Markdown Viewer
 
-View and edit markdown files in your browser with syntax highlighting, dark mode, and GitHub Gist sharing.
+View local markdown files in your browser with syntax highlighting, dark mode, and GitHub Gist sharing.
 
 ## Installation
 
@@ -42,8 +42,7 @@ lmv README.md --no-open
 - **Syntax highlighting** for common web, scripting, and systems languages
 - **Dark/Light/System theme** toggle
 - **Focus mode** for distraction-free reading (`F`, then `F` or `Escape` to exit)
-- **Edit mode** with live preview toggle (Cmd+E)
-- **Save to disk** (Cmd+S)
+- **Read-only source handling** — LMV never modifies opened Markdown source files
 - **Share as GitHub Gist** (requires `GITHUB_TOKEN`)
 
 ## Keyboard Shortcuts
@@ -54,15 +53,24 @@ lmv README.md --no-open
 | `Escape` | Exit focus mode |
 | `Cmd/Ctrl+B` | Toggle the file browser |
 | `Cmd/Ctrl+K` or `/` | Search files |
-| `Cmd/Ctrl+E` | Toggle edit mode |
-| `Cmd/Ctrl+S` | Save changes |
 
-Focus mode is deliberately read-only: entering it hides the top bar, file browser,
-and table of contents while preserving the document's readable measure. Switching
-to edit mode or opening file search exits focus mode. The setting lasts only for
-the current page session, so reopening LMV always restores the normal shell; the
-file browser's collapsed/open and resized state is preserved while focus mode is
-active.
+Focus mode hides the top bar, file browser, and table of contents while preserving
+the document's readable measure. Opening file search exits focus mode. The setting
+lasts only for the current page session, so reopening LMV always restores the normal
+shell; the file browser's collapsed/open and resized state is preserved while focus
+mode is active.
+
+## 0.3.0 Breaking Change
+
+LMV 0.3.0 removes source editing. The desktop and mobile Read/Edit controls,
+Markdown editor, dirty indicator, Save button, autosave preference, and the
+`Cmd/Ctrl+E` and `Cmd/Ctrl+S` editing shortcuts are no longer available.
+`PUT /api/file` has also been removed; requests now receive `404 Not Found`.
+Existing `lmv-autosave` localStorage values are ignored.
+
+“Read-only” here means LMV does not modify the opened Markdown source files. LMV
+still stores UI preferences and the last selected document, and Gist sharing still
+sends the currently loaded disk content to GitHub when configured.
 
 ## GitHub Gist Sharing
 

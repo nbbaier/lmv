@@ -1,6 +1,6 @@
 # lmv — Agent Instructions
 
-CLI tool for viewing/editing local markdown files in the browser. Bun + React 19 + Tailwind v4.
+CLI tool for viewing local markdown files in the browser. Bun + React 19 + Tailwind v4.
 
 ## Structure
 
@@ -12,7 +12,7 @@ lmv/
 │   ├── index.html      # HTML entry (loads Tailwind + highlight.js via CDN)
 │   ├── main.tsx        # React root mount
 │   ├── app.tsx         # Main UI (largest file)
-│   ├── components/     # shadcn/ui pattern (button, sidebar, toc, frontmatter, toggle, tooltip)
+│   ├── components/     # shadcn/ui pattern (button, sidebar, toc, frontmatter, tooltip)
 │   └── lib/            # file-discovery, file-tree, frontmatter, state, utils (cn helper)
 ├── scripts/build.ts    # Cross-platform binary builder
 └── docs/               # Specs and agent docs
@@ -23,8 +23,8 @@ lmv/
 | Task          | Location           | Notes                          |
 | ------------- | ------------------ | ------------------------------ |
 | CLI args/help | `src/cli.ts`       | port, --no-open                |
-| API routes    | `src/server.ts`    | /api/file, /api/files, /api/share |
-| UI logic      | `src/app.tsx`      | theme, save, gist sharing      |
+| API routes    | `src/server.ts`    | GET /api/file, /api/files, /api/share |
+| UI logic      | `src/app.tsx`      | viewing, theme, gist sharing   |
 | Add component | `src/components/`  | cva + Radix pattern            |
 | File tree/discovery | `src/lib/`   | sidebar data layer             |
 | Build binary  | `scripts/build.ts` | darwin/linux targets           |
@@ -85,8 +85,9 @@ Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agent
 
 ## Notes
 
-- No test suite yet; CI only runs typecheck + smoke tests
+- `bun test` covers server and pure UI helpers; CI currently runs typecheck + smoke tests
 - GitHub Gist sharing requires `GITHUB_TOKEN` env var
+- Opened Markdown source files are read-only: there is no `PUT /api/file` route
 - `module` field in package.json points to the CLI entry (atypical)
 - `docs/multi-file.md` is the spec for the multi-file/sidebar feature
 - `docs/demo.md` is a markdown feature demo file for manually testing the viewer

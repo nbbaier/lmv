@@ -213,19 +213,6 @@ body {
 	background-color: var(--accent);
 }
 
-.btn-outline[data-state="on"] {
-	background-color: var(--accent);
-}
-
-.btn-success {
-	background-color: #16a34a;
-	color: white;
-}
-
-.btn-success:hover {
-	background-color: #16a34a;
-}
-
 /* Icons */
 .icon {
 	width: 1rem;
@@ -234,36 +221,6 @@ body {
 }
 
 .icon-muted {
-	color: var(--muted-foreground);
-}
-
-/* Editor */
-.editor-container {
-	min-height: calc(100vh - 8rem);
-}
-
-.editor-textarea {
-	width: 100%;
-	min-height: calc(100vh - 10rem);
-	padding: 1rem;
-	border-radius: var(--radius);
-	border: 1px solid var(--input);
-	background-color: var(--background);
-	color: var(--foreground);
-	font-family:
-		ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 0.875rem;
-	line-height: 1.7;
-	resize: none;
-	outline: none;
-}
-
-.editor-textarea:focus {
-	border-color: var(--ring);
-	box-shadow: 0 0 0 1px var(--ring);
-}
-
-.editor-textarea::placeholder {
 	color: var(--muted-foreground);
 }
 
