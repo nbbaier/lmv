@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
+import { parseCliArgs } from "./cli-args";
 import { discoverMarkdownFiles } from "./lib/file-discovery";
 import { startServer } from "./server";
-
-const args = process.argv.slice(2);
 
 function printHelp() {
 	console.log(`
@@ -37,54 +36,35 @@ Examples:
 }
 
 async function main() {
-	if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
+	const rawArgs = process.argv.slice(2);
+	if (
+		rawArgs.length === 0 ||
+		rawArgs.includes("-h") ||
+		rawArgs.includes("--help")
+	) {
 		printHelp();
 		process.exit(0);
 	}
 
-	// Parse arguments
-	const inputs: string[] = [];
-	let port = 3000;
-	let autoOpen = true;
-	let recursive = false;
-	let includeHidden = false;
-	let includeIgnored = false;
-
-	for (let i = 0; i < args.length; i++) {
-		const arg = args[i];
-		if (arg === "-p" || arg === "--port") {
-			const portArg = args[++i];
-			if (!portArg) {
-				console.error("Error: --port requires a number");
-				process.exit(1);
-			}
-			port = parseInt(portArg, 10);
-			if (Number.isNaN(port)) {
-				console.error("Error: Invalid port number");
-				process.exit(1);
-			}
-		} else if (arg === "--no-open") {
-			autoOpen = false;
-		} else if (arg === "--recursive" || arg === "-r") {
-			recursive = true;
-		} else if (arg === "--hidden") {
-			includeHidden = true;
-		} else if (arg === "--ignored") {
-			includeIgnored = true;
-		} else if (arg && !arg.startsWith("-")) {
-			inputs.push(arg);
-		} else {
-			console.error(`Error: Unknown option: ${arg}`);
-			printHelp();
-			process.exit(1);
-		}
-	}
-
-	if (inputs.length === 0) {
-		console.error("Error: No inputs specified");
-		printHelp();
+	let config;
+	try {
+		config = parseCliArgs(rawArgs);
+	} catch (error) {
+		console.error(
+			`Error: ${error instanceof Error ? error.message : "Invalid arguments"}`,
+		);
+		console.error("\nRun 'lmv --help' for usage.");
 		process.exit(1);
 	}
+
+	const {
+		inputs,
+		port,
+		autoOpen,
+		recursive,
+		includeHidden,
+		includeIgnored,
+	} = config;
 
 	let discovered: string[];
 	try {
@@ -140,4 +120,4 @@ async function main() {
 	}
 }
 
-main();
+if (import.meta.main) void main();
