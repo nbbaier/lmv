@@ -5,6 +5,8 @@ import {
 	Eye,
 	FileText,
 	Loader2,
+	Maximize2,
+	Minimize2,
 	MoreHorizontal,
 	Monitor,
 	Moon,
@@ -41,6 +43,7 @@ import {
 	TooltipTrigger,
 } from "./components/tooltip";
 import type { ApiFile, SortOrder } from "./lib/file-tree";
+import { getFocusModeShortcutAction } from "./lib/focus-mode";
 import { parseFrontmatter } from "./lib/frontmatter";
 import { rehypeHighlight } from "./lib/syntax-highlighting";
 import {
@@ -278,6 +281,8 @@ export function App() {
 	const [hasChanges, setHasChanges] = useState(false);
 	const [isSharing, setIsSharing] = useState(false);
 	const [shareConfigured, setShareConfigured] = useState(false);
+	const [focusMode, setFocusMode] = useState(false);
+	const [focusAnnouncement, setFocusAnnouncement] = useState("");
 	const [sidebarVisible, setSidebarVisible] = useState(true);
 	const [sidebarWidthPct, setSidebarWidthPct] = useState(0.25);
 	const [sortOrder, setSortOrder] = useState<SortOrder>("name-asc");
@@ -299,6 +304,7 @@ export function App() {
 	const fileTreeRef = useRef<HTMLDivElement | null>(null);
 	const mobileActionsRef = useRef<HTMLDivElement | null>(null);
 	const documentScrollerRef = useRef<HTMLElement | null>(null);
+	const focusReturnRef = useRef<HTMLElement | null>(null);
 	const previousSelectedPathRef = useRef<string | null>(null);
 	const lastSaveRef = useRef<{
 		path: string;
@@ -597,6 +603,46 @@ export function App() {
 		localStorage.setItem("lmv-autosave", String(autosave));
 	}, [autosave]);
 
+	const exitFocusMode = useCallback((restoreFocus = true) => {
+		const returnTarget = focusReturnRef.current;
+		focusReturnRef.current = null;
+		setFocusMode(false);
+		setFocusAnnouncement("Focus mode off.");
+		if (!restoreFocus) return;
+		requestAnimationFrame(() => {
+			if (returnTarget?.isConnected) {
+				returnTarget.focus({ preventScroll: true });
+				return;
+			}
+			documentScrollerRef.current?.focus({ preventScroll: true });
+		});
+	}, []);
+
+	const enterFocusMode = useCallback(() => {
+		if (!selectedPath || isEditing || focusMode) return;
+		const activeElement = document.activeElement;
+		const activeHTMLElement =
+			activeElement instanceof HTMLElement ? activeElement : null;
+		const mobileMenuButton = activeHTMLElement?.closest("#lmv-mobile-actions")
+			? mobileActionsRef.current?.querySelector<HTMLButtonElement>(
+					'button[aria-controls="lmv-mobile-actions"]',
+				)
+			: null;
+		focusReturnRef.current = mobileMenuButton ?? activeHTMLElement;
+		const focusedChrome = Boolean(
+			activeHTMLElement?.closest("[data-focus-chrome]"),
+		);
+
+		setMobileActionsOpen(false);
+		setFocusMode(true);
+		setFocusAnnouncement("Focus mode on. Press Escape or F to exit.");
+		if (focusedChrome) {
+			requestAnimationFrame(() =>
+				documentScrollerRef.current?.focus({ preventScroll: true }),
+			);
+		}
+	}, [focusMode, isEditing, selectedPath]);
+
 	useEffect(() => {
 		if (!autosave || !isEditing || !hasChanges || !selectedPath) return;
 		const timer = setTimeout(() => {
@@ -606,12 +652,13 @@ export function App() {
 	}, [autosave, isEditing, hasChanges, selectedPath, handleSave]);
 
 	const toggleEditing = useCallback(() => {
+		if (!isEditing && focusMode) exitFocusMode(false);
 		if (isEditing && hasChanges) {
 			// Discard changes when switching back to read mode.
 			setEditedContent(content);
 		}
 		setIsEditing((editing) => !editing);
-	}, [content, hasChanges, isEditing]);
+	}, [content, exitFocusMode, focusMode, hasChanges, isEditing]);
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
@@ -619,7 +666,26 @@ export function App() {
 			const targetIsEditable =
 				target instanceof HTMLInputElement ||
 				target instanceof HTMLTextAreaElement ||
+				target instanceof HTMLSelectElement ||
 				(target instanceof HTMLElement && target.isContentEditable);
+			const focusShortcutAction = getFocusModeShortcutAction({
+				key: e.key,
+				altKey: e.altKey,
+				ctrlKey: e.ctrlKey,
+				metaKey: e.metaKey,
+				shiftKey: e.shiftKey,
+				repeat: e.repeat,
+				targetIsEditable,
+				focusMode,
+				canEnter: Boolean(selectedPath) && !isEditing,
+			});
+
+			if (focusShortcutAction) {
+				e.preventDefault();
+				if (focusShortcutAction === "enter") enterFocusMode();
+				else exitFocusMode();
+				return;
+			}
 			const searchShortcut =
 				files.length > 1 &&
 				(((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") ||
@@ -631,9 +697,12 @@ export function App() {
 
 			if (searchShortcut) {
 				e.preventDefault();
+				if (focusMode) exitFocusMode(false);
 				setSidebarVisible(true);
-				searchInputRef.current?.focus();
-				searchInputRef.current?.select();
+				requestAnimationFrame(() => {
+					searchInputRef.current?.focus();
+					searchInputRef.current?.select();
+				});
 				return;
 			}
 
@@ -649,6 +718,11 @@ export function App() {
 			if ((e.metaKey || e.ctrlKey) && e.key === "b") {
 				if (files.length <= 1) return;
 				e.preventDefault();
+				if (focusMode) {
+					exitFocusMode(false);
+					setSidebarVisible(true);
+					return;
+				}
 				setSidebarVisible((prev) => !prev);
 			}
 		};
@@ -659,6 +733,9 @@ export function App() {
 		hasChanges,
 		handleSave,
 		files.length,
+		focusMode,
+		enterFocusMode,
+		exitFocusMode,
 		selectedPath,
 		toggleEditing,
 	]);
@@ -781,8 +858,22 @@ export function App() {
 
 	return (
 		<TooltipProvider delayDuration={300}>
-			<div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background">
-				<header className="z-50 flex-none border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+			<div
+				id="lmv-shell"
+				className={cn(
+					"lmv-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-background",
+					focusMode && "focus-mode",
+				)}
+			>
+				<p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+					{focusAnnouncement}
+				</p>
+				<header
+					data-focus-chrome
+					className="focus-topbar z-50 flex-none border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+					aria-hidden={focusMode ? true : undefined}
+					inert={focusMode ? true : undefined}
+				>
 					<div className="grid h-[3.25rem] grid-cols-[minmax(0,1fr)_minmax(15rem,28rem)_minmax(0,1fr)] items-center gap-3 px-3 max-lg:grid-cols-[auto_minmax(0,1fr)_auto] max-lg:gap-2 max-lg:px-2">
 						<div className="flex min-w-0 items-center gap-2">
 							{showSidebar && (
@@ -990,6 +1081,28 @@ export function App() {
 											type="button"
 											variant="ghost"
 											size="icon"
+											onClick={enterFocusMode}
+											disabled={!selectedPath || isEditing}
+											aria-label="Enter focus mode"
+											aria-pressed={focusMode}
+											aria-keyshortcuts="F"
+											aria-controls="lmv-shell"
+											className="h-8 w-8 text-muted-foreground hover:text-foreground"
+										>
+											<Maximize2 />
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent>
+										{isEditing ? "Focus mode is available in read mode" : "Focus mode (F)"}
+									</TooltipContent>
+								</Tooltip>
+
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
 											onClick={handleShare}
 											disabled={isSharing || !selectedPath}
 											aria-label="Share as GitHub Gist"
@@ -1064,6 +1177,20 @@ export function App() {
 										<Button
 											type="button"
 											variant="ghost"
+											onClick={enterFocusMode}
+											disabled={!selectedPath || isEditing}
+											aria-keyshortcuts="F"
+											aria-controls="lmv-shell"
+											role="menuitem"
+											className="h-9 w-full justify-start px-2.5 text-xs font-normal"
+										>
+											<Maximize2 />
+											Focus mode
+											<kbd className="ml-auto font-mono text-[10px] text-muted-foreground">F</kbd>
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
 											onClick={() => {
 												setMobileActionsOpen(false);
 												handleShare();
@@ -1108,36 +1235,78 @@ export function App() {
 					</div>
 				</header>
 
+				{focusMode && (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => exitFocusMode()}
+						aria-label="Exit focus mode"
+						aria-keyshortcuts="Escape F"
+						aria-controls="lmv-shell"
+						className="focus-exit fixed right-3 top-2.5 z-[60] h-8 gap-1.5 bg-background/90 px-2.5 text-xs text-muted-foreground backdrop-blur hover:text-foreground"
+					>
+						<Minimize2 />
+						<span>Exit focus</span>
+						<kbd aria-hidden="true" className="ml-1 font-mono text-[10px] text-foreground">
+							Esc
+						</kbd>
+					</Button>
+				)}
+
 				<div className="flex min-h-0 flex-1 overflow-hidden">
 					{showSidebar && (
-						<Sidebar
-							files={files}
-							selectedPath={selectedPath}
-							cursorPath={cursorPath}
-							onCursorPathChange={setCursorPath}
-							onOpenPath={openPath}
-							pendingRefresh={pendingRefresh}
-							onRefresh={() => refreshFiles(true)}
-							sidebarVisible={sidebarVisible}
-							onSidebarVisibleChange={setSidebarVisible}
-							sidebarWidthPct={sidebarWidthPct}
-							onSidebarWidthPctChange={setSidebarWidthPct}
-							sortOrder={sortOrder}
-							onSortOrderChange={setSortOrder}
-							filterText={filterText}
-							expandedFolders={expandedFolders}
-							onExpandedFoldersChange={setExpandedFolders}
-							isMobile={isMobile}
-							treeRef={fileTreeRef}
-						/>
+						<div
+							data-focus-chrome
+							className="focus-sidebar-shell flex-shrink-0"
+							style={
+								!isMobile && sidebarVisible
+									? {
+											width: `clamp(13rem, ${sidebarWidthPct * 100}vw, 30rem)`,
+										}
+									: { width: 0 }
+							}
+							aria-hidden={focusMode ? true : undefined}
+							inert={focusMode ? true : undefined}
+						>
+							<Sidebar
+								files={files}
+								selectedPath={selectedPath}
+								cursorPath={cursorPath}
+								onCursorPathChange={setCursorPath}
+								onOpenPath={openPath}
+								pendingRefresh={pendingRefresh}
+								onRefresh={() => refreshFiles(true)}
+								sidebarVisible={sidebarVisible}
+								onSidebarVisibleChange={setSidebarVisible}
+								sidebarWidthPct={sidebarWidthPct}
+								onSidebarWidthPctChange={setSidebarWidthPct}
+								sortOrder={sortOrder}
+								onSortOrderChange={setSortOrder}
+								filterText={filterText}
+								expandedFolders={expandedFolders}
+								onExpandedFoldersChange={setExpandedFolders}
+								isMobile={isMobile}
+								treeRef={fileTreeRef}
+							/>
+						</div>
 					)}
 
 					<main
 						ref={documentScrollerRef}
-						className="document-scroller min-w-0 flex-1 overflow-y-auto overscroll-contain"
+						className="document-scroller min-w-0 flex-1 overflow-y-auto overscroll-contain outline-none"
 						aria-label="Document"
-						aria-hidden={isMobile && showSidebar && sidebarVisible ? true : undefined}
-						inert={isMobile && showSidebar && sidebarVisible ? true : undefined}
+						tabIndex={-1}
+						aria-hidden={
+							!focusMode && isMobile && showSidebar && sidebarVisible
+								? true
+								: undefined
+						}
+						inert={
+							!focusMode && isMobile && showSidebar && sidebarVisible
+								? true
+								: undefined
+						}
 					>
 						<div
 							className={cn(
