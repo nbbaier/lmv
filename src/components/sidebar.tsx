@@ -86,8 +86,10 @@ export function Sidebar({
 		[filteredTree, expandedFolders, autoExpand],
 	);
 	const fallbackCursorPath =
-		(filterText ? visible.find((entry) => entry.node.kind === "file") : visible[0])
-			?.node.path ?? null;
+		(filterText
+			? visible.find((entry) => entry.node.kind === "file")
+			: visible[0]
+		)?.node.path ?? null;
 
 	const sidebarRef = useRef<HTMLDivElement | null>(null);
 	const [treeFocused, setTreeFocused] = useState(false);
@@ -261,40 +263,42 @@ export function Sidebar({
 		>
 			<div className="border-b border-border px-2 pb-2 pt-2">
 				<div className="flex h-8 items-center justify-between gap-2 px-1">
-				<div className="flex items-center gap-2 min-w-0">
-					<div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-						Files
+					<div className="flex items-center gap-2 min-w-0">
+						<div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+							Files
+						</div>
+						<span className="text-xs tabular-nums text-muted-foreground/70">
+							{filterText
+								? `${visibleFileCount}/${files.length}`
+								: files.length}
+						</span>
 					</div>
-					<span className="text-xs tabular-nums text-muted-foreground/70">
-						{filterText ? `${visibleFileCount}/${files.length}` : files.length}
-					</span>
+					<div className="flex items-center gap-1">
+						{pendingRefresh && (
+							<Button
+								type="button"
+								size="icon"
+								variant="ghost"
+								onClick={onRefresh}
+								aria-label="Refresh file list"
+								className="h-7 w-7 text-ring hover:text-foreground"
+							>
+								<RefreshCw className="h-3.5 w-3.5" />
+							</Button>
+						)}
+						{isMobile && (
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={() => onSidebarVisibleChange(false)}
+								aria-label="Close sidebar"
+								className="h-7 w-7"
+							>
+								<X className="h-3.5 w-3.5" />
+							</Button>
+						)}
+					</div>
 				</div>
-				<div className="flex items-center gap-1">
-					{pendingRefresh && (
-						<Button
-							type="button"
-							size="icon"
-							variant="ghost"
-							onClick={onRefresh}
-							aria-label="Refresh file list"
-							className="h-7 w-7 text-ring hover:text-foreground"
-						>
-							<RefreshCw className="h-3.5 w-3.5" />
-						</Button>
-					)}
-					{isMobile && (
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={() => onSidebarVisibleChange(false)}
-							aria-label="Close sidebar"
-							className="h-7 w-7"
-						>
-							<X className="h-3.5 w-3.5" />
-						</Button>
-					)}
-				</div>
-			</div>
 
 				<label className="sr-only" htmlFor="lmv-file-sort">
 					Sort files
@@ -382,30 +386,26 @@ export function Sidebar({
 	}
 
 	return (
-		<div
-			ref={sidebarRef}
-			className="relative flex-shrink-0"
-			style={widthStyle}
-		>
+		<div ref={sidebarRef} className="relative flex-shrink-0" style={widthStyle}>
 			{content}
-			<div
-				role="separator"
-				aria-label="Resize sidebar"
-				aria-orientation="vertical"
-				aria-valuemin={208}
-				aria-valuemax={480}
-				aria-valuenow={Math.round(
-					Math.min(480, Math.max(208, sidebarWidthPct * window.innerWidth)),
-				)}
-				tabIndex={0}
-				onPointerDown={onResizePointerDown}
-				onKeyDown={onResizeKeyDown}
-				onDoubleClick={() => onSidebarWidthPctChange(0.25)}
-				className="group absolute -right-2 top-0 z-10 flex h-full w-4 cursor-col-resize touch-none items-center justify-center outline-none"
-			>
+			<div className="group absolute -right-2 top-0 z-10 flex h-full w-4 cursor-col-resize touch-none items-center justify-center outline-none">
+				<hr
+					aria-label="Resize sidebar"
+					aria-orientation="vertical"
+					aria-valuemin={208}
+					aria-valuemax={480}
+					aria-valuenow={Math.round(
+						Math.min(480, Math.max(208, sidebarWidthPct * window.innerWidth)),
+					)}
+					tabIndex={0}
+					onPointerDown={onResizePointerDown}
+					onKeyDown={onResizeKeyDown}
+					onDoubleClick={() => onSidebarWidthPctChange(0.25)}
+					className="absolute inset-0 m-0 h-full w-full border-0 bg-transparent p-0"
+				/>
 				<div
 					className={cn(
-						"h-full w-px bg-transparent transition-colors duration-150 group-hover:bg-ring/35 group-focus-visible:bg-ring/55 group-active:bg-ring/70",
+						"pointer-events-none h-full w-px bg-transparent transition-colors duration-150 group-hover:bg-ring/35 group-focus-within:bg-ring/55 group-active:bg-ring/70",
 						isResizing && "bg-ring/70",
 					)}
 				/>
@@ -445,24 +445,40 @@ function TreeRow({
 	const isCursor = cursorPath === node.path;
 	const paddingLeft = 6 + depth * 14;
 
+	const activate = () => {
+		onCursor(node.path);
+		if (node.kind === "folder") onToggleFolder(node.path);
+		else onOpenFile(node.path);
+	};
+
 	return (
-		<div
+		<button
+			type="button"
 			id={nodeDomId(node.path)}
 			style={{ paddingLeft }}
 			className={cn(
-				"relative flex h-7 select-none items-center gap-1.5 rounded-md pr-2 text-[13px] leading-5 transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-transparent",
+				"relative flex h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md border-0 bg-transparent p-0 pr-2 text-left text-[13px] leading-5 outline-none transition-colors before:absolute before:bottom-1 before:left-0 before:top-1 before:w-0.5 before:rounded-full before:bg-transparent",
 				isSelected &&
 					"bg-accent/80 font-medium text-accent-foreground before:bg-ring",
-				!isSelected && "text-foreground/85 hover:bg-muted/70 hover:text-foreground",
-				isCursor && treeFocused && !isSelected &&
+				!isSelected &&
+					"text-foreground/85 hover:bg-muted/70 hover:text-foreground",
+				isCursor &&
+					treeFocused &&
+					!isSelected &&
 					"outline outline-1 -outline-offset-1 outline-ring/60",
 			)}
-			onClick={() => {
-				onCursor(node.path);
-				if (node.kind === "folder") onToggleFolder(node.path);
-				else onOpenFile(node.path);
+			onClick={activate}
+			onMouseDown={(e) => {
+				e.preventDefault();
+			}}
+			onKeyDown={(e) => {
+				if (e.key !== "Enter" && e.key !== " ") return;
+				e.preventDefault();
+				e.stopPropagation();
+				activate();
 			}}
 			role="treeitem"
+			tabIndex={-1}
 			aria-level={depth + 1}
 			aria-expanded={node.kind === "folder" ? expanded : undefined}
 			aria-selected={isSelected}
@@ -499,6 +515,6 @@ function TreeRow({
 			)}
 
 			<span className="truncate min-w-0 flex-1">{node.name}</span>
-		</div>
+		</button>
 	);
 }
