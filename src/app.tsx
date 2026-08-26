@@ -1108,8 +1108,8 @@ export function App() {
 					<main
 						className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
 						aria-label="Document"
-						aria-hidden={isMobile && sidebarVisible ? true : undefined}
-						inert={isMobile && sidebarVisible ? true : undefined}
+						aria-hidden={isMobile && showSidebar && sidebarVisible ? true : undefined}
+						inert={isMobile && showSidebar && sidebarVisible ? true : undefined}
 					>
 						<div className="document-layout document-container mx-auto px-5 py-8 sm:px-8 sm:py-10 lg:py-12">
 							{!selectedPath ? (
