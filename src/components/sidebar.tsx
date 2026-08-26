@@ -91,6 +91,7 @@ export function Sidebar({
 
 	const sidebarRef = useRef<HTMLDivElement | null>(null);
 	const [treeFocused, setTreeFocused] = useState(false);
+	const [isResizing, setIsResizing] = useState(false);
 
 	useEffect(() => {
 		if (!cursorPath && visible.length > 0) {
@@ -210,6 +211,7 @@ export function Sidebar({
 
 	const onResizePointerDown = (e: ReactPointerEvent) => {
 		e.preventDefault();
+		setIsResizing(true);
 		const startX = e.clientX;
 		const startWidth =
 			sidebarRef.current?.getBoundingClientRect().width ??
@@ -223,6 +225,7 @@ export function Sidebar({
 			updateSidebarWidth(startWidth + ev.clientX - startX);
 		};
 		const onUp = () => {
+			setIsResizing(false);
 			document.body.style.cursor = previousCursor;
 			document.body.style.userSelect = previousUserSelect;
 			window.removeEventListener("pointermove", onMove);
@@ -398,10 +401,20 @@ export function Sidebar({
 				onPointerDown={onResizePointerDown}
 				onKeyDown={onResizeKeyDown}
 				onDoubleClick={() => onSidebarWidthPctChange(0.25)}
-				className="group absolute -right-1.5 top-0 z-10 flex h-full w-3 cursor-col-resize touch-none items-center justify-center outline-none"
+				className="group absolute -right-2 top-0 z-10 flex h-full w-4 cursor-col-resize touch-none items-center justify-center outline-none"
 			>
-				<div className="h-full w-px bg-transparent transition-colors group-hover:bg-ring/50 group-focus-visible:w-0.5 group-focus-visible:bg-ring" />
-				<div className="absolute h-7 w-0.5 rounded-full bg-border transition-colors group-hover:bg-ring/70 group-focus-visible:bg-ring" />
+				<div
+					className={cn(
+						"h-full w-px bg-transparent transition-colors duration-150 group-hover:bg-ring/35 group-focus-visible:bg-ring/55 group-active:bg-ring/70",
+						isResizing && "bg-ring/70",
+					)}
+				/>
+				<div
+					className={cn(
+						"absolute h-9 w-px rounded-full bg-muted-foreground transition-all duration-150 group-hover:h-10 group-hover:w-1 group-hover:bg-ring group-focus-visible:h-10 group-focus-visible:w-1 group-focus-visible:bg-ring group-active:h-12 group-active:w-1 group-active:bg-ring",
+						isResizing && "h-12 w-1 bg-ring",
+					)}
+				/>
 			</div>
 		</div>
 	);
