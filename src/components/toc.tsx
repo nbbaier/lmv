@@ -67,8 +67,7 @@ export function TableOfContents({ markdown }: { markdown: string }) {
 	const handleClick = (id: string) => {
 		const element = document.getElementById(id);
 		if (element) {
-			const y = element.getBoundingClientRect().top + window.scrollY - 80;
-			window.scrollTo({ top: y, behavior: "smooth" });
+			element.scrollIntoView({ behavior: "smooth", block: "start" });
 		}
 	};
 

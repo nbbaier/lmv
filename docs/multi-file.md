@@ -60,7 +60,7 @@ User-selectable sort options (dropdown in sidebar header):
 **Folder sorting by date**: Folders sort by the most recently modified file within them
 
 ### Filter/Search
-- **Filter box** at top of sidebar
+- **Filter box** centered in the application top bar; focusing it reveals the sidebar
 - **Live filtering**: Updates immediately as user types
 - **Full path matching**: Matches against `folder/subfolder/file.md`
 - **Auto-expand tree**: All folders containing matches expand automatically
@@ -124,6 +124,7 @@ User-selectable sort options (dropdown in sidebar header):
 | Cmd/Ctrl + B | Toggle sidebar visibility |
 | Cmd/Ctrl + E | Toggle edit mode |
 | Cmd/Ctrl + S | Save current file |
+| Cmd/Ctrl + K or `/` | Focus file search |
 | Arrow Up/Down | Navigate file list (when sidebar focused) |
 | Enter | Open selected file |
 
