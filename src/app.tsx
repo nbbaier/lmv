@@ -316,8 +316,11 @@ export function App() {
 
 	useEffect(() => {
 		if (!selectedPath) return;
+		const controller = new AbortController();
 
-		fetch(`/api/file?path=${encodeURIComponent(selectedPath)}`)
+		fetch(`/api/file?path=${encodeURIComponent(selectedPath)}`, {
+			signal: controller.signal,
+		})
 			.then(async (res) => {
 				const data = await res.json();
 				if (!res.ok) {
@@ -326,11 +329,13 @@ export function App() {
 				return data as { content: string; filename: string };
 			})
 			.then((data) => {
+				if (controller.signal.aborted) return;
 				setContent(data.content);
 				setEditedContent(data.content);
 				setFilename(data.filename);
 			})
 			.catch((error) => {
+				if (controller.signal.aborted) return;
 				addToast({
 					type: "error",
 					message: (error as Error).message || "Failed to read file",
@@ -339,6 +344,8 @@ export function App() {
 				setEditedContent("");
 				setFilename(selectedPath.split("/").pop() || selectedPath);
 			});
+
+		return () => controller.abort();
 	}, [selectedPath, addToast]);
 
 	// Persist last opened document
