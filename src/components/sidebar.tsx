@@ -411,8 +411,8 @@ export function Sidebar({
 				/>
 				<div
 					className={cn(
-						"absolute h-9 w-px rounded-full bg-muted-foreground transition-all duration-150 group-hover:h-10 group-hover:w-1 group-hover:bg-ring group-focus-visible:h-10 group-focus-visible:w-1 group-focus-visible:bg-ring group-active:h-12 group-active:w-1 group-active:bg-ring",
-						isResizing && "h-12 w-1 bg-ring",
+						"absolute h-7 w-1 rounded-full bg-muted-foreground/55 transition-colors duration-150 group-hover:bg-ring group-focus-visible:bg-ring group-active:bg-ring",
+						isResizing && "bg-ring",
 					)}
 				/>
 			</div>
