@@ -290,46 +290,6 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 						);
 					}
 				},
-				PUT: async (req) => {
-					const url = new URL(req.url);
-					const requestedPath = url.searchParams.get("path") || undefined;
-
-					const relPath =
-						requestedPath ??
-						(singleFile ? [...allowedFiles.keys()][0] : undefined);
-					if (!relPath) {
-						return Response.json(
-							{ error: "Missing required query param: path" },
-							{ status: 400 },
-						);
-					}
-
-					const absPath = allowedFiles.get(relPath);
-					if (!absPath) {
-						return Response.json(
-							{ error: "File not allowed" },
-							{ status: 403 },
-						);
-					}
-
-					try {
-						const body = await req.json();
-						const content = body.content;
-						if (typeof content !== "string") {
-							return Response.json(
-								{ error: "Invalid content" },
-								{ status: 400 },
-							);
-						}
-						await Bun.write(absPath, content);
-						return Response.json({ success: true });
-					} catch (_error) {
-						return Response.json(
-							{ error: "Failed to write file" },
-							{ status: 500 },
-						);
-					}
-				},
 			},
 			"/api/share": {
 				GET: () => {

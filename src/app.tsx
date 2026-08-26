@@ -1,8 +1,6 @@
 import {
-	Check,
 	ChevronRight,
 	ExternalLink,
-	Eye,
 	FileText,
 	Loader2,
 	Maximize2,
@@ -11,13 +9,9 @@ import {
 	Monitor,
 	Moon,
 	PanelLeft,
-	Pencil,
-	Save,
 	Search,
 	Share2,
 	Sun,
-	Timer,
-	TimerOff,
 	X,
 } from "lucide-react";
 import {
@@ -35,7 +29,6 @@ import { Button } from "./components/button";
 import { FrontmatterDisplay } from "./components/frontmatter";
 import { Sidebar, scrollNodeIntoView } from "./components/sidebar";
 import { TableOfContents } from "./components/toc";
-import { Toggle } from "./components/toggle";
 import {
 	Tooltip,
 	TooltipContent,
@@ -273,12 +266,7 @@ export function App() {
 	const [cursorPath, setCursorPath] = useState<string | null>(null);
 	const [pendingRefresh, setPendingRefresh] = useState(false);
 	const [content, setContent] = useState("");
-	const [editedContent, setEditedContent] = useState("");
 	const [filename, setFilename] = useState<string>("");
-	const [isEditing, setIsEditing] = useState(false);
-	const [isSaving, setIsSaving] = useState(false);
-	const [saveSuccess, setSaveSuccess] = useState(false);
-	const [hasChanges, setHasChanges] = useState(false);
 	const [isSharing, setIsSharing] = useState(false);
 	const [shareConfigured, setShareConfigured] = useState(false);
 	const [focusMode, setFocusMode] = useState(false);
@@ -291,25 +279,16 @@ export function App() {
 	const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
 		new Set(),
 	);
-	const [autosave, setAutosave] = useState(() => {
-		const stored = localStorage.getItem("lmv-autosave");
-		return stored !== null ? stored === "true" : true;
-	});
 	const { theme, setTheme, resolvedTheme } = useTheme();
 	const { toasts, addToast, removeToast } = useToast();
 
 	const selectedPathRef = useRef<string | null>(null);
-	const hasChangesRef = useRef(false);
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 	const fileTreeRef = useRef<HTMLDivElement | null>(null);
 	const mobileActionsRef = useRef<HTMLDivElement | null>(null);
 	const documentScrollerRef = useRef<HTMLElement | null>(null);
 	const focusReturnRef = useRef<HTMLElement | null>(null);
 	const previousSelectedPathRef = useRef<string | null>(null);
-	const lastSaveRef = useRef<{
-		path: string;
-		manual: boolean;
-	} | null>(null);
 
 	useEffect(() => {
 		selectedPathRef.current = selectedPath;
@@ -330,9 +309,6 @@ export function App() {
 		}
 		previousSelectedPathRef.current = selectedPath;
 	}, [selectedPath]);
-	useEffect(() => {
-		hasChangesRef.current = hasChanges;
-	}, [hasChanges]);
 
 	useEffect(() => {
 		const storedVisible = localStorage.getItem("lmv-sidebar-visible");
@@ -434,7 +410,6 @@ export function App() {
 			.then((data) => {
 				if (controller.signal.aborted) return;
 				setContent(data.content);
-				setEditedContent(data.content);
 				setFilename(data.filename);
 			})
 			.catch((error) => {
@@ -444,7 +419,6 @@ export function App() {
 					message: (error as Error).message || "Failed to read file",
 				});
 				setContent("");
-				setEditedContent("");
 				setFilename(selectedPath.split("/").pop() || selectedPath);
 			});
 
@@ -503,89 +477,41 @@ export function App() {
 			if (!data?.path) return;
 			if (data.path !== selectedPathRef.current) return;
 
-			if (hasChangesRef.current) {
-				addToast({
-					type: "info",
-					message: "File changed on disk",
-					action: {
-						label: "Reload",
-						onClick: () => {
-							const p = selectedPathRef.current;
-							if (!p) return;
-							fetch(`/api/file?path=${encodeURIComponent(p)}`)
-								.then((res) => res.json())
-								.then((d: { content: string; filename: string }) => {
-									setContent(d.content);
-									setEditedContent(d.content);
-									setFilename(d.filename);
-								})
-								.catch(() => {});
-						},
-					},
+			fetch(`/api/file?path=${encodeURIComponent(data.path)}`)
+				.then(async (res) => {
+					const document: unknown = await res.json();
+					if (!res.ok) throw new Error("Failed to reload file");
+					if (
+						!document ||
+						typeof document !== "object" ||
+						!("content" in document) ||
+						typeof document.content !== "string" ||
+						!("filename" in document) ||
+						typeof document.filename !== "string"
+					) {
+						throw new Error("Invalid file response");
+					}
+					return { content: document.content, filename: document.filename };
+				})
+				.then((document) => {
+					if (data.path !== selectedPathRef.current) return;
+					setContent(document.content);
+					setFilename(document.filename);
+					addToast({ type: "info", message: "File updated on disk" });
+				})
+				.catch((error) => {
+					if (data.path !== selectedPathRef.current) return;
+					addToast({
+						type: "error",
+						message: (error as Error).message,
+					});
 				});
-			} else {
-				const p = selectedPathRef.current;
-				if (!p) return;
-				const lastSave = lastSaveRef.current;
-				const fromOurSave = lastSave?.path === p;
-				fetch(`/api/file?path=${encodeURIComponent(p)}`)
-					.then((res) => res.json())
-					.then((d: { content: string; filename: string }) => {
-						setContent(d.content);
-						setEditedContent(d.content);
-						setFilename(d.filename);
-						if (!fromOurSave || lastSave?.manual) {
-							addToast({ type: "info", message: "File updated on disk" });
-						}
-					})
-					.catch(() => {});
-			}
 		};
 
 		es.addEventListener("fs-changed", onFsChanged as EventListener);
 		es.addEventListener("file-changed", onFileChanged as EventListener);
 		return () => es.close();
 	}, [addToast]);
-
-	useEffect(() => {
-		setHasChanges(editedContent !== content);
-	}, [editedContent, content]);
-
-	const handleSave = useCallback(
-		async (manual = true) => {
-			if (!selectedPath) return false;
-			setIsSaving(true);
-			try {
-				const res = await fetch(
-					`/api/file?path=${encodeURIComponent(selectedPath)}`,
-					{
-						method: "PUT",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ content: editedContent }),
-					},
-				);
-				if (!res.ok) throw new Error("Failed to save file");
-
-				setContent(editedContent);
-				setSaveSuccess(true);
-				setTimeout(() => setSaveSuccess(false), 2000);
-				lastSaveRef.current = { path: selectedPath, manual };
-				setTimeout(() => {
-					lastSaveRef.current = null;
-				}, 2000);
-				return true;
-			} catch (error) {
-				addToast({
-					type: "error",
-					message: (error as Error).message || "Failed to save file",
-				});
-				return false;
-			} finally {
-				setIsSaving(false);
-			}
-		},
-		[editedContent, selectedPath, addToast],
-	);
 
 	useEffect(() => {
 		localStorage.setItem("lmv-sidebar-visible", String(sidebarVisible));
@@ -598,10 +524,6 @@ export function App() {
 	useEffect(() => {
 		localStorage.setItem("lmv-sort-order", sortOrder);
 	}, [sortOrder]);
-
-	useEffect(() => {
-		localStorage.setItem("lmv-autosave", String(autosave));
-	}, [autosave]);
 
 	const exitFocusMode = useCallback((restoreFocus = true) => {
 		const returnTarget = focusReturnRef.current;
@@ -619,7 +541,7 @@ export function App() {
 	}, []);
 
 	const enterFocusMode = useCallback(() => {
-		if (!selectedPath || isEditing || focusMode) return;
+		if (!selectedPath || focusMode) return;
 		const activeElement = document.activeElement;
 		const activeHTMLElement =
 			activeElement instanceof HTMLElement ? activeElement : null;
@@ -641,31 +563,13 @@ export function App() {
 				documentScrollerRef.current?.focus({ preventScroll: true }),
 			);
 		}
-	}, [focusMode, isEditing, selectedPath]);
-
-	useEffect(() => {
-		if (!autosave || !isEditing || !hasChanges || !selectedPath) return;
-		const timer = setTimeout(() => {
-			handleSave(false);
-		}, 1000);
-		return () => clearTimeout(timer);
-	}, [autosave, isEditing, hasChanges, selectedPath, handleSave]);
-
-	const toggleEditing = useCallback(() => {
-		if (!isEditing && focusMode) exitFocusMode(false);
-		if (isEditing && hasChanges) {
-			// Discard changes when switching back to read mode.
-			setEditedContent(content);
-		}
-		setIsEditing((editing) => !editing);
-	}, [content, exitFocusMode, focusMode, hasChanges, isEditing]);
+	}, [focusMode, selectedPath]);
 
 	useEffect(() => {
 		const handler = (e: KeyboardEvent) => {
 			const target = e.target;
 			const targetIsEditable =
 				target instanceof HTMLInputElement ||
-				target instanceof HTMLTextAreaElement ||
 				target instanceof HTMLSelectElement ||
 				(target instanceof HTMLElement && target.isContentEditable);
 			const focusShortcutAction = getFocusModeShortcutAction({
@@ -677,7 +581,7 @@ export function App() {
 				repeat: e.repeat,
 				targetIsEditable,
 				focusMode,
-				canEnter: Boolean(selectedPath) && !isEditing,
+				canEnter: Boolean(selectedPath),
 			});
 
 			if (focusShortcutAction) {
@@ -705,16 +609,6 @@ export function App() {
 				});
 				return;
 			}
-
-			if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-				e.preventDefault();
-				if (isEditing && hasChanges) handleSave();
-			}
-			if ((e.metaKey || e.ctrlKey) && e.key === "e") {
-				if (!selectedPath) return;
-				e.preventDefault();
-				toggleEditing();
-			}
 			if ((e.metaKey || e.ctrlKey) && e.key === "b") {
 				if (files.length <= 1) return;
 				e.preventDefault();
@@ -729,15 +623,11 @@ export function App() {
 		window.addEventListener("keydown", handler);
 		return () => window.removeEventListener("keydown", handler);
 	}, [
-		isEditing,
-		hasChanges,
-		handleSave,
 		files.length,
 		focusMode,
 		enterFocusMode,
 		exitFocusMode,
 		selectedPath,
-		toggleEditing,
 	]);
 
 	useEffect(() => {
@@ -779,7 +669,7 @@ export function App() {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					content: isEditing ? editedContent : content,
+					content,
 					filename,
 					public: true,
 				}),
@@ -812,7 +702,7 @@ export function App() {
 		} finally {
 			setIsSharing(false);
 		}
-	}, [shareConfigured, isEditing, editedContent, content, filename, addToast]);
+	}, [shareConfigured, content, filename, addToast]);
 
 	const cycleTheme = () => {
 		const next: Record<Theme, Theme> = {
@@ -827,19 +717,13 @@ export function App() {
 	const showSidebar = files.length > 1;
 
 	const openPath = useCallback(
-		async (path: string) => {
+		(path: string) => {
 			if (path === selectedPath) return;
-
-			if (hasChanges) {
-				const ok = await handleSave();
-				if (!ok) return;
-			}
-
 			setSelectedPath(path);
 			setCursorPath(path);
 			if (isMobile) setSidebarVisible(false);
 		},
-		[selectedPath, hasChanges, handleSave, isMobile],
+		[selectedPath, isMobile],
 	);
 
 	const parsed = useMemo(() => parseFrontmatter(content), [content]);
@@ -948,12 +832,6 @@ export function App() {
 								) : (
 									<span className="truncate text-xs text-muted-foreground">No file selected</span>
 								)}
-								{hasChanges && (
-									<span
-										className="h-1.5 w-1.5 flex-none rounded-full bg-ring"
-										title="Unsaved changes"
-									/>
-								)}
 							</div>
 						</div>
 
@@ -995,86 +873,7 @@ export function App() {
 						)}
 
 						<div className="flex min-w-0 items-center justify-end gap-1">
-							<div
-								className="hidden h-8 items-center rounded-md bg-muted/70 p-0.5 lg:flex"
-								role="group"
-								aria-label="Document mode"
-							>
-								<Button
-									type="button"
-									variant="ghost"
-									onClick={() => {
-										if (isEditing) toggleEditing();
-									}}
-									disabled={!selectedPath}
-									aria-pressed={!isEditing}
-									className={cn(
-										"h-7 gap-1.5 rounded px-2 text-xs font-normal text-muted-foreground shadow-none hover:text-foreground",
-										!isEditing && "bg-background text-foreground shadow-sm hover:bg-background",
-									)}
-								>
-									<Eye className="h-3.5 w-3.5" />
-									Read
-								</Button>
-								<Button
-									type="button"
-									variant="ghost"
-									onClick={() => {
-										if (!isEditing) toggleEditing();
-									}}
-									disabled={!selectedPath}
-									aria-pressed={isEditing}
-									className={cn(
-										"h-7 gap-1.5 rounded px-2 text-xs font-normal text-muted-foreground shadow-none hover:text-foreground",
-										isEditing && "bg-background text-foreground shadow-sm hover:bg-background",
-									)}
-								>
-									<Pencil className="h-3.5 w-3.5" />
-									Edit
-								</Button>
-							</div>
-
-							{isEditing && (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											size="sm"
-											onClick={() => handleSave()}
-											disabled={!selectedPath || !hasChanges || isSaving}
-											aria-label="Save changes"
-											className={cn(
-												"h-8 px-2.5 max-lg:w-8 max-lg:px-0",
-												saveSuccess && "bg-green-600 hover:bg-green-600",
-											)}
-										>
-											{saveSuccess ? <Check /> : <Save />}
-											<span className="max-lg:hidden">{saveSuccess ? "Saved" : "Save"}</span>
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>Save changes (Cmd/Ctrl+S)</TooltipContent>
-								</Tooltip>
-							)}
-
-							<div className="mx-1 hidden h-4 w-px bg-border lg:block" />
-
 							<div className="hidden items-center gap-0.5 lg:flex">
-								{isEditing && (
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Toggle
-												pressed={autosave}
-												onPressedChange={setAutosave}
-												aria-label="Toggle autosave"
-												className="h-8 min-w-8 px-1.5 text-muted-foreground"
-											>
-												{autosave ? <Timer /> : <TimerOff />}
-											</Toggle>
-										</TooltipTrigger>
-										<TooltipContent>{autosave ? "Autosave on" : "Autosave off"}</TooltipContent>
-									</Tooltip>
-								)}
-
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
@@ -1082,7 +881,7 @@ export function App() {
 											variant="ghost"
 											size="icon"
 											onClick={enterFocusMode}
-											disabled={!selectedPath || isEditing}
+											disabled={!selectedPath}
 											aria-label="Enter focus mode"
 											aria-pressed={focusMode}
 											aria-keyshortcuts="F"
@@ -1092,9 +891,7 @@ export function App() {
 											<Maximize2 />
 										</Button>
 									</TooltipTrigger>
-									<TooltipContent>
-										{isEditing ? "Focus mode is available in read mode" : "Focus mode (F)"}
-									</TooltipContent>
+									<TooltipContent>Focus mode (F)</TooltipContent>
 								</Tooltip>
 
 								<Tooltip>
@@ -1135,25 +932,6 @@ export function App() {
 								</Tooltip>
 							</div>
 
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										onClick={toggleEditing}
-										disabled={!selectedPath}
-										aria-label={isEditing ? "Switch to read mode" : "Switch to edit mode"}
-										className="h-8 w-8 text-muted-foreground hover:text-foreground lg:hidden"
-									>
-										{isEditing ? <Eye /> : <Pencil />}
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									{isEditing ? "Read mode" : "Edit mode"} (Cmd/Ctrl+E)
-								</TooltipContent>
-							</Tooltip>
-
 							<div ref={mobileActionsRef} className="relative lg:hidden">
 								<Button
 									type="button"
@@ -1178,7 +956,7 @@ export function App() {
 											type="button"
 											variant="ghost"
 											onClick={enterFocusMode}
-											disabled={!selectedPath || isEditing}
+											disabled={!selectedPath}
 											aria-keyshortcuts="F"
 											aria-controls="lmv-shell"
 											role="menuitem"
@@ -1215,19 +993,6 @@ export function App() {
 											<ThemeIcon />
 											Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}
 										</Button>
-										{isEditing && (
-											<Button
-												type="button"
-												variant="ghost"
-												onClick={() => setAutosave((enabled) => !enabled)}
-												aria-pressed={autosave}
-												role="menuitem"
-												className="h-9 w-full justify-start px-2.5 text-xs font-normal"
-											>
-												{autosave ? <Timer /> : <TimerOff />}
-												Autosave {autosave ? "on" : "off"}
-											</Button>
-										)}
 									</div>
 								)}
 							</div>
@@ -1312,7 +1077,6 @@ export function App() {
 							className={cn(
 								"document-layout document-container mx-auto px-5 py-8 sm:px-8 sm:py-10 lg:py-12",
 								selectedPath &&
-									!isEditing &&
 									headings.length > 0 &&
 									"document-container--with-rail",
 							)}
@@ -1325,16 +1089,6 @@ export function App() {
 										</div>
 										<p className="text-sm">Select a file to view</p>
 									</div>
-								</div>
-							) : isEditing ? (
-								<div className="document-primary min-h-[calc(100dvh-7.25rem)]">
-									<textarea
-										className="min-h-[calc(100dvh-7.25rem)] w-full resize-none rounded-lg border border-input bg-background p-4 font-mono text-sm leading-relaxed text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
-										value={editedContent}
-										onChange={(e) => setEditedContent(e.target.value)}
-										placeholder="Start writing markdown..."
-										spellCheck={false}
-									/>
 								</div>
 							) : (
 								<article className="document-reading-layout">
