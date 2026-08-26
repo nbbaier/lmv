@@ -28,6 +28,8 @@ type ApiFile = {
 	error?: string;
 };
 
+const FILE_METADATA_CONCURRENCY = 16;
+
 function toPosixPath(p: string) {
 	return p.replaceAll("\\", "/");
 }
@@ -41,9 +43,49 @@ function buildAllowedFiles(cwd: string, files: Iterable<string>) {
 	return allowed;
 }
 
+async function collectApiFiles(allowedFiles: Map<string, string>) {
+	const entries = Array.from(allowedFiles.entries());
+	const files = new Array<ApiFile>(entries.length);
+	let nextIndex = 0;
+
+	const workers = Array.from(
+		{ length: Math.min(FILE_METADATA_CONCURRENCY, entries.length) },
+		async () => {
+			while (nextIndex < entries.length) {
+				const index = nextIndex++;
+				const entry = entries[index];
+				if (!entry) return;
+				const [relPath, absPath] = entry;
+				const name = basename(absPath);
+
+				try {
+					const lst = await lstat(absPath);
+					const isSymlink = lst.isSymbolicLink();
+					const metadata = isSymlink ? await stat(absPath) : lst;
+					files[index] = {
+						path: relPath,
+						name,
+						mtimeMs: metadata.mtimeMs,
+						isSymlink,
+					};
+				} catch (error) {
+					files[index] = {
+						path: relPath,
+						name,
+						error:
+							error instanceof Error ? error.message : "Failed to stat file",
+					};
+				}
+			}
+		},
+	);
+
+	await Promise.all(workers);
+	return files;
+}
+
 export function startServer(config: StartServerConfig, port: number = 3000) {
-	const absoluteFiles = new Set<string>(config.files);
-	let allowedFiles = buildAllowedFiles(config.cwd, absoluteFiles);
+	let allowedFiles = buildAllowedFiles(config.cwd, config.files);
 	let singleFile = allowedFiles.size === 1;
 	let pendingRefresh = false;
 
@@ -87,8 +129,7 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 				includeHidden: config.includeHidden,
 				strict: false,
 			});
-			for (const abs of discovered) absoluteFiles.add(abs);
-			allowedFiles = buildAllowedFiles(config.cwd, absoluteFiles);
+			allowedFiles = buildAllowedFiles(config.cwd, discovered);
 			singleFile = allowedFiles.size === 1;
 			pendingRefresh = false;
 			return true;
@@ -193,26 +234,7 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 						if (ok) broadcast("fs-changed", { pendingRefresh: false });
 					}
 
-					const files: ApiFile[] = [];
-					for (const [relPath, absPath] of allowedFiles.entries()) {
-						const name = basename(absPath);
-						try {
-							const lst = await lstat(absPath);
-							const st = await stat(absPath);
-							files.push({
-								path: relPath,
-								name,
-								mtimeMs: st.mtimeMs,
-								isSymlink: lst.isSymbolicLink(),
-							});
-						} catch (error) {
-							files.push({
-								path: relPath,
-								name,
-								error: (error as Error).message || "Failed to stat file",
-							});
-						}
-					}
+					const files = await collectApiFiles(allowedFiles);
 					return Response.json({
 						cwd: config.cwd,
 						singleFile,
