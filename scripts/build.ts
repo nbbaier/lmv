@@ -32,7 +32,7 @@ async function build() {
 		const outfile = join(DIST_DIR, name);
 
 		try {
-			await $`bun build src/cli.ts --compile --target=${target} --outfile=${outfile}`.quiet();
+			await $`bun build src/cli.ts --compile --production --target=${target} --outfile=${outfile}`.quiet();
 			console.log(`  ✓ ${outfile}`);
 		} catch (error) {
 			console.error(`  ✗ Failed to build ${name}`);

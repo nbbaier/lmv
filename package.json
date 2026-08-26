@@ -8,8 +8,8 @@
 		"lmv": "./src/cli.ts"
 	},
 	"scripts": {
-		"dev": "bun run src/cli.ts",
-		"build": "bun build src/cli.ts --compile --outfile dist/lmv",
+		"dev": "NODE_ENV=development bun run src/cli.ts",
+		"build": "bun build src/cli.ts --compile --production --outfile dist/lmv",
 		"build:all": "bun run scripts/build.ts",
 		"build:cp": "bun run build && cp dist/lmv /Users/nbbaier/.local/bin/"
 	},

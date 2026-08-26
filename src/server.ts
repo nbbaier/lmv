@@ -446,10 +446,13 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 				},
 			},
 		},
-		development: {
-			hmr: true,
-			console: true,
-		},
+		development:
+			process.env.NODE_ENV === "development"
+				? {
+						hmr: true,
+						console: true,
+					}
+				: false,
 	});
 
 	return server;
