@@ -38,6 +38,17 @@ Overview
 		]);
 	});
 
+	test("requires a valid closing fence before resuming headings", () => {
+		expect(
+			extractHeadings(
+				"# Visible\n```md\n```not-a-close\n# Still hidden\n```\n## Also visible",
+			),
+		).toEqual([
+			{ id: "visible", text: "Visible", level: 1, line: 1 },
+			{ id: "also-visible", text: "Also visible", level: 2, line: 6 },
+		]);
+	});
+
 	test("creates a usable id for punctuation-only headings", () => {
 		expect(slugifyHeading("✨")).toBe("section");
 		expect(extractHeadings("# ✨\n## ✨").map(({ id }) => id)).toEqual([

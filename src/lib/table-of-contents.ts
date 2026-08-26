@@ -57,12 +57,16 @@ export function extractHeadings(markdown: string): DocumentHeading[] {
 		const fenceMatch = line.match(/^ {0,3}(`{3,}|~{3,})/);
 		if (fenceMatch?.[1]) {
 			const marker = fenceMatch[1][0];
+			const isClosingFence = /^[ \t]*$/.test(
+				line.slice(fenceMatch[0].length),
+			);
 			if (!marker) continue;
 			if (!fence) {
 				fence = { marker, length: fenceMatch[1].length };
 			} else if (
 				marker === fence.marker &&
-				fenceMatch[1].length >= fence.length
+				fenceMatch[1].length >= fence.length &&
+				isClosingFence
 			) {
 				fence = undefined;
 			}
