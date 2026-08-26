@@ -33,7 +33,7 @@ export function slugifyHeading(text: string): string {
 
 export function extractHeadings(markdown: string): DocumentHeading[] {
 	const headings: DocumentHeading[] = [];
-	const lines = markdown.split("\n");
+	const lines = markdown.split(/\r?\n/);
 	const slugCounts = new Map<string, number>();
 	let fence: { marker: string; length: number } | undefined;
 

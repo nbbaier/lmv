@@ -23,6 +23,12 @@ Overview
 		]);
 	});
 
+	test("extracts setext headings from CRLF markdown", () => {
+		expect(extractHeadings("Windows heading\r\n===============\r\n")).toEqual([
+			{ id: "windows-heading", text: "Windows heading", level: 1, line: 1 },
+		]);
+	});
+
 	test("ignores heading-like text in fenced code", () => {
 		expect(
 			extractHeadings("# Visible\n```md\n# Hidden\n```\n## Also visible"),
