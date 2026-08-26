@@ -401,7 +401,7 @@ export function Sidebar({
 					onPointerDown={onResizePointerDown}
 					onKeyDown={onResizeKeyDown}
 					onDoubleClick={() => onSidebarWidthPctChange(0.25)}
-					className="absolute inset-0 m-0 h-full w-full border-0 bg-transparent p-0"
+					className="absolute inset-0 m-0 h-full w-full border-0 bg-transparent p-0 outline-none"
 				/>
 				<div
 					className={cn(
@@ -411,7 +411,7 @@ export function Sidebar({
 				/>
 				<div
 					className={cn(
-						"absolute h-7 w-1 rounded-full bg-muted-foreground transition-colors duration-150 group-hover:bg-ring group-focus-visible:bg-ring group-active:bg-ring",
+						"pointer-events-none absolute h-7 w-1 -translate-x-[0.5px] rounded-full bg-muted-foreground transition-colors duration-150 group-hover:bg-ring group-focus-within:bg-ring group-active:bg-ring",
 						isResizing && "bg-ring",
 					)}
 				/>
