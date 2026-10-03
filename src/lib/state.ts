@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -17,10 +17,22 @@ type StateData = {
 	lastDocument: Record<string, string>;
 };
 
+function parseState(raw: string): StateData {
+	const data: unknown = JSON.parse(raw);
+	if (typeof data !== "object" || data === null) return { lastDocument: {} };
+	const record = (data as Record<string, unknown>).lastDocument;
+	if (typeof record !== "object" || record === null) return { lastDocument: {} };
+	const lastDocument: Record<string, string> = {};
+	for (const [key, value] of Object.entries(record)) {
+		if (typeof value === "string") lastDocument[key] = value;
+	}
+	return { lastDocument };
+}
+
 async function readState(): Promise<StateData> {
 	try {
-		const file = Bun.file(getStatePath());
-		return (await file.json()) as StateData;
+		const raw = await readFile(getStatePath(), "utf8");
+		return parseState(raw);
 	} catch {
 		return { lastDocument: {} };
 	}
@@ -28,7 +40,7 @@ async function readState(): Promise<StateData> {
 
 async function writeState(state: StateData): Promise<void> {
 	await mkdir(getDataDir(), { recursive: true });
-	await Bun.write(getStatePath(), JSON.stringify(state, null, "\t") + "\n");
+	await writeFile(getStatePath(), JSON.stringify(state, null, "\t") + "\n");
 }
 
 export async function getLastDocument(cwd: string): Promise<string | null> {

@@ -9,8 +9,10 @@
 	},
 	"scripts": {
 		"dev": "NODE_ENV=development bun run src/cli.ts",
-		"build": "bun build src/cli.ts --compile --production --outfile dist/lmv",
-		"build:all": "bun run scripts/build.ts",
+		"build:frontend": "bun scripts/build-frontend.ts",
+		"build": "bun run build:frontend && bun build src/cli.ts --compile --production --outfile dist/lmv",
+		"build:all": "bun run build:frontend && bun run scripts/build.ts",
+		"build:scriptc": "bun run build:frontend && scriptc build src/cli.ts -o cli",
 		"build:cp": "bun run build && cp dist/lmv /Users/nbbaier/.local/bin/",
 		"build:cp:optimized": "bun run build:all && bun run scripts/copy-optimized.ts"
 	},

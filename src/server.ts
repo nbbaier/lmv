@@ -1,7 +1,8 @@
 import { watch } from "node:fs";
-import { lstat, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, stat } from "node:fs/promises";
+import { createServer, ServerResponse, type IncomingMessage } from "node:http";
 import { basename, dirname, relative, resolve } from "node:path";
-import index from "./index.html";
+import { FRONTEND_HTML } from "./frontend.generated";
 import { discoverMarkdownFiles } from "./lib/file-discovery";
 import { getLastDocument, setLastDocument } from "./lib/state";
 
@@ -35,7 +36,7 @@ function toPosixPath(p: string) {
 	return p.replaceAll("\\", "/");
 }
 
-function buildAllowedFiles(cwd: string, files: Iterable<string>) {
+function buildAllowedFiles(cwd: string, files: readonly string[]) {
 	const allowed = new Map<string, string>();
 	for (const abs of files) {
 		const rel = toPosixPath(relative(cwd, abs));
@@ -45,7 +46,7 @@ function buildAllowedFiles(cwd: string, files: Iterable<string>) {
 }
 
 async function collectApiFiles(allowedFiles: Map<string, string>) {
-	const entries = Array.from(allowedFiles.entries());
+	const entries = [...allowedFiles.entries()];
 	const files = new Array<ApiFile>(entries.length);
 	let nextIndex = 0;
 
@@ -85,22 +86,65 @@ async function collectApiFiles(allowedFiles: Map<string, string>) {
 	return files;
 }
 
+function sendJson(res: ServerResponse, status: number, body: unknown) {
+	const payload = JSON.stringify(body);
+	res.writeHead(status, {
+		"Content-Type": "application/json; charset=utf-8",
+		"Content-Length": Buffer.byteLength(payload),
+	});
+	res.end(payload);
+}
+
+function sendError(res: ServerResponse, status: number, message: string) {
+	sendJson(res, status, { error: message });
+}
+
+function readRequestJson(req: IncomingMessage): Promise<unknown> {
+	return new Promise((resolvePromise, rejectPromise) => {
+		const chunks: Buffer[] = [];
+		req.on("data", (chunk: Buffer) => chunks.push(chunk));
+		req.on("end", () => {
+			try {
+				if (chunks.length === 0) return resolvePromise({});
+				resolvePromise(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+			} catch (error) {
+				rejectPromise(error);
+			}
+		});
+		req.on("error", (error) => rejectPromise(error));
+	});
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+	if (typeof value !== "object" || value === null) return null;
+	return value as Record<string, unknown>;
+}
+
 export function startServer(config: StartServerConfig, port: number = 3000) {
 	let allowedFiles = buildAllowedFiles(config.cwd, config.files);
 	let singleFile = allowedFiles.size === 1;
 	let pendingRefresh = false;
 
-	const encoder = new TextEncoder();
-	const sseClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+	// unknown[] instead of a typed collection: scriptc does not support
+	// server handles as typed array elements, Set elements, or Map keys,
+	// but checked `unknown` storage retains object references.
+	let sseClients: unknown[] = [];
+
+	const removeSseClient = (client: unknown) => {
+		sseClients = sseClients.filter((c) => c !== client);
+	};
 
 	const broadcast = (event: string, data: unknown) => {
 		const payload = `event: ${event}\n` + `data: ${JSON.stringify(data)}\n\n`;
-		const chunk = encoder.encode(payload);
-		for (const controller of sseClients) {
+		for (const client of sseClients) {
+			// scriptc has no instanceof for node:http classes; this conversion
+			// is runtime-checked by scriptc, so a bad entry throws here.
+			// biome-ignore lint/style/useConsistentTypeAssertions: runtime-checked narrowing required for scriptc
+			const response = client as ServerResponse;
 			try {
-				controller.enqueue(chunk);
+				response.write(payload);
 			} catch {
-				sseClients.delete(controller);
+				removeSseClient(client);
 			}
 		}
 	};
@@ -183,261 +227,293 @@ export function startServer(config: StartServerConfig, port: number = 3000) {
 		if (watchRoots.size === 0)
 			addWatchRoot(config.cwd, Boolean(config.recursive));
 
+		// scriptc: fs.watch has no recursive-option lowering — enumerate
+		// subdirectories ourselves and watch each one.
+		const watchTargets = new Set<string>();
 		for (const [absRoot, recursive] of watchRoots.entries()) {
+			watchTargets.add(absRoot);
+			if (!recursive) continue;
+			const pending = [absRoot];
+			while (pending.length > 0) {
+				const dir = pending.pop();
+				if (!dir) break;
+				let names;
+				try {
+					names = await readdir(dir);
+				} catch {
+					continue;
+				}
+				for (const name of names) {
+					if (!config.includeHidden && name.startsWith(".")) continue;
+					const sub = resolve(dir, name);
+					try {
+						const lst = await lstat(sub);
+						if (!lst.isDirectory()) continue;
+					} catch {
+						continue;
+					}
+					if (!watchTargets.has(sub)) {
+						watchTargets.add(sub);
+						pending.push(sub);
+					}
+				}
+			}
+		}
+
+		for (const watchDir of watchTargets) {
 			try {
-				const w = watch(
-					absRoot,
-					{ recursive },
-					(_event, filename: string | Buffer | null) => {
-						const name = filename
-							? typeof filename === "string"
-								? filename
-								: filename.toString()
-							: null;
-
-						if (!name) return void maybeSetPendingRefresh();
-						if (!config.includeHidden && isHiddenPath(name)) return;
-
-						const absPath = resolve(absRoot, name);
-						const relPath = toPosixPath(relative(config.cwd, absPath));
-
-						if (allowedFiles.has(relPath)) {
-							broadcast("file-changed", { path: relPath });
-							return;
-						}
-
-						if (isMarkdownPath(absPath)) maybeSetPendingRefresh();
-					},
-				);
-
-				w.on("error", () => {});
+				const w = watch(watchDir, (_event: string) => {
+					// scriptc's fs.watch lowering does not provide the filename,
+					// so any change flags a pending refresh.
+					maybeSetPendingRefresh();
+				});
+				void w;
 			} catch {
-				// ignore watch errors (e.g. unsupported recursive mode)
+				// ignore watch errors
 			}
 		}
 	};
 
 	void setupWatchers();
 
-	const server = Bun.serve({
-		idleTimeout: 0,
-		port,
-		routes: {
-			"/": index,
-			"/api/files": {
-				GET: async (req) => {
-					const url = new URL(req.url);
-					const shouldRefresh =
-						url.searchParams.get("refresh") === "true" ||
-						url.searchParams.get("refresh") === "1";
+	const handleApiFiles = async (req: IncomingMessage, res: ServerResponse) => {
+		if (req.method !== "GET") return sendError(res, 405, "Method not allowed");
+		const url = new URL(req.url ?? "/", "http://localhost");
+		const shouldRefresh =
+			url.searchParams.get("refresh") === "true" ||
+			url.searchParams.get("refresh") === "1";
 
-					if (shouldRefresh) {
-						const ok = await rescan();
-						if (ok) broadcast("fs-changed", { pendingRefresh: false });
-					}
+		if (shouldRefresh) {
+			const ok = await rescan();
+			if (ok) broadcast("fs-changed", { pendingRefresh: false });
+		}
 
-					const files = await collectApiFiles(allowedFiles);
-					return Response.json({
-						cwd: config.cwd,
-						singleFile,
-						pendingRefresh,
-						files,
-					});
+		const files = await collectApiFiles(allowedFiles);
+		sendJson(res, 200, {
+			cwd: config.cwd,
+			singleFile,
+			pendingRefresh,
+			files,
+		});
+	};
+
+	const handleApiFile = async (req: IncomingMessage, res: ServerResponse) => {
+		// Read-only API: non-GET requests are rejected as if no route exists.
+		if (req.method !== "GET") return sendError(res, 404, "Not found");
+		const url = new URL(req.url ?? "/", "http://localhost");
+		const requestedPath = url.searchParams.get("path") || undefined;
+
+		const relPath =
+			requestedPath ??
+			(singleFile ? [...allowedFiles.keys()][0] : undefined);
+		if (!relPath) {
+			return sendError(res, 400, "Missing required query param: path");
+		}
+
+		const absPath = allowedFiles.get(relPath);
+		if (!absPath) {
+			return sendError(res, 403, "File not allowed");
+		}
+
+		try {
+			const lst = await lstat(absPath).catch(() => null);
+			if (!lst) {
+				return sendError(res, 404, "File not found");
+			}
+			const content = await readFile(absPath, "utf8");
+			sendJson(res, 200, {
+				content,
+				filename: basename(absPath),
+				path: relPath,
+			});
+		} catch {
+			sendError(res, 500, "Failed to read file");
+		}
+	};
+
+	const handleApiShare = async (req: IncomingMessage, res: ServerResponse) => {
+		if (req.method === "GET") {
+			return sendJson(res, 200, { configured: Boolean(GITHUB_TOKEN) });
+		}
+		if (req.method !== "POST") return sendError(res, 405, "Method not allowed");
+
+		if (!GITHUB_TOKEN) {
+			return sendError(
+				res,
+				400,
+				"GITHUB_TOKEN not configured. Set it in your environment to enable sharing.",
+			);
+		}
+
+		try {
+			const body = asRecord(await readRequestJson(req));
+			const content = body?.content;
+			const name = body?.filename;
+			const isPublic = body?.public !== false;
+
+			if (typeof content !== "string" || !content.trim()) {
+				return sendError(res, 400, "Content is required");
+			}
+			if (typeof name !== "string" || !name) {
+				return sendError(res, 400, "Filename is required");
+			}
+
+			const response = await fetch("https://api.github.com/gists", {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${GITHUB_TOKEN}`,
+					Accept: "application/vnd.github+json",
+					"X-GitHub-Api-Version": "2022-11-28",
+					"Content-Type": "application/json",
 				},
-			},
-			"/api/file": {
-				GET: async (req) => {
-					const url = new URL(req.url);
-					const requestedPath = url.searchParams.get("path") || undefined;
+				body: JSON.stringify({
+					description: `Shared via lmv: ${name}`,
+					public: isPublic,
+					files: {
+						[name]: { content },
+					},
+				}),
+			});
 
-					const relPath =
-						requestedPath ??
-						(singleFile ? [...allowedFiles.keys()][0] : undefined);
-					if (!relPath) {
-						return Response.json(
-							{ error: "Missing required query param: path" },
-							{ status: 400 },
-						);
-					}
+			if (!response.ok) {
+				const error = await response.text();
+				console.error("GitHub API error:", error);
+				return sendJson(res, response.status, {
+					error: "Failed to create gist",
+				});
+			}
 
-					const absPath = allowedFiles.get(relPath);
-					if (!absPath) {
-						return Response.json(
-							{ error: "File not allowed" },
-							{ status: 403 },
-						);
-					}
+			const gist = asRecord(await response.json());
+			if (
+				!gist ||
+				typeof gist.html_url !== "string" ||
+				typeof gist.id !== "string"
+			) {
+				return sendError(res, 502, "Unexpected response from GitHub");
+			}
+			const result: GistResponse = { html_url: gist.html_url, id: gist.id };
+			sendJson(res, 200, { url: result.html_url, id: result.id });
+		} catch (error) {
+			console.error("Share error:", error);
+			sendError(res, 500, "Failed to create gist");
+		}
+	};
 
-					try {
-						const file = Bun.file(absPath);
-						const exists = await file.exists();
-						if (!exists) {
-							return Response.json(
-								{ error: "File not found" },
-								{ status: 404 },
-							);
-						}
-						const content = await file.text();
-						return Response.json({
-							content,
-							filename: basename(absPath),
-							path: relPath,
-						});
-					} catch (_error) {
-						return Response.json(
-							{ error: "Failed to read file" },
-							{ status: 500 },
-						);
-					}
-				},
-			},
-			"/api/share": {
-				GET: () => {
-					return Response.json({ configured: Boolean(GITHUB_TOKEN) });
-				},
-				POST: async (req) => {
-					if (!GITHUB_TOKEN) {
-						return Response.json(
-							{
-								error:
-									"GITHUB_TOKEN not configured. Set it in your environment to enable sharing.",
-							},
-							{ status: 400 },
-						);
-					}
+	const handleApiLastDocument = async (
+		req: IncomingMessage,
+		res: ServerResponse,
+	) => {
+		if (req.method === "GET") {
+			const path = await getLastDocument(config.cwd);
+			if (path && allowedFiles.has(path)) {
+				return sendJson(res, 200, { path });
+			}
+			return sendJson(res, 200, { path: null });
+		}
+		if (req.method !== "PUT") return sendError(res, 405, "Method not allowed");
 
-					try {
-						const body = await req.json();
-						const content = body.content as string;
-						const name = body.filename as string;
-						const isPublic = body.public !== false;
+		try {
+			const body = asRecord(await readRequestJson(req));
+			const path = body?.path;
+			if (typeof path !== "string" || !allowedFiles.has(path)) {
+				return sendError(res, 400, "Invalid path");
+			}
+			await setLastDocument(config.cwd, path);
+			sendJson(res, 200, { success: true });
+		} catch {
+			sendError(res, 500, "Failed to save last document");
+		}
+	};
 
-						if (typeof content !== "string" || !content.trim()) {
-							return Response.json(
-								{ error: "Content is required" },
-								{ status: 400 },
-							);
-						}
+	const handleApiWatch = (req: IncomingMessage, res: ServerResponse) => {
+		if (req.method !== "GET") return sendError(res, 405, "Method not allowed");
 
-						const response = await fetch("https://api.github.com/gists", {
-							method: "POST",
-							headers: {
-								Authorization: `Bearer ${GITHUB_TOKEN}`,
-								Accept: "application/vnd.github+json",
-								"X-GitHub-Api-Version": "2022-11-28",
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify({
-								description: `Shared via lmv: ${name}`,
-								public: isPublic,
-								files: {
-									[name]: { content },
-								},
-							}),
-						});
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+		});
+		res.write(`event: ready\ndata: {}\n\n`);
+		if (pendingRefresh) {
+			res.write(
+				`event: fs-changed\ndata: ${JSON.stringify({ pendingRefresh: true })}\n\n`,
+			);
+		}
 
-						if (!response.ok) {
-							const error = await response.text();
-							console.error("GitHub API error:", error);
-							return Response.json(
-								{ error: "Failed to create gist" },
-								{ status: response.status },
-							);
-						}
+		sseClients.push(res);
+		const interval = setInterval(() => {
+			try {
+				res.write(`: ping\n\n`);
+			} catch {
+				clearInterval(interval);
+				removeSseClient(res);
+			}
+		}, 15000);
 
-						const gist = (await response.json()) as GistResponse;
-						return Response.json({
-							url: gist.html_url,
-							id: gist.id,
-						});
-					} catch (error) {
-						console.error("Share error:", error);
-						return Response.json(
-							{ error: "Failed to create gist" },
-							{ status: 500 },
-						);
-					}
-				},
-			},
-			"/api/last-document": {
-				GET: async () => {
-					const path = await getLastDocument(config.cwd);
-					if (path && allowedFiles.has(path)) {
-						return Response.json({ path });
-					}
-					return Response.json({ path: null });
-				},
-				PUT: async (req) => {
-					try {
-						const body = await req.json();
-						const path = body.path;
-						if (typeof path !== "string" || !allowedFiles.has(path)) {
-							return Response.json(
-								{ error: "Invalid path" },
-								{ status: 400 },
-							);
-						}
-						await setLastDocument(config.cwd, path);
-						return Response.json({ success: true });
-					} catch {
-						return Response.json(
-							{ error: "Failed to save last document" },
-							{ status: 500 },
-						);
-					}
-				},
-			},
-			"/api/watch": {
-				GET: () => {
-					let controllerRef: ReadableStreamDefaultController<Uint8Array> | null =
-						null;
-					let interval: ReturnType<typeof setInterval> | null = null;
+		req.on("close", () => {
+			clearInterval(interval);
+			removeSseClient(res);
+		});
+	};
 
-					const stream = new ReadableStream<Uint8Array>({
-						start(controller) {
-							controllerRef = controller;
-							sseClients.add(controller);
-							controller.enqueue(encoder.encode(`event: ready\ndata: {}\n\n`));
-							if (pendingRefresh) {
-								controller.enqueue(
-									encoder.encode(
-										`event: fs-changed\ndata: ${JSON.stringify({ pendingRefresh: true })}\n\n`,
-									),
-								);
-							}
-							interval = setInterval(() => {
-								try {
-									controller.enqueue(encoder.encode(`: ping\n\n`));
-								} catch {
-									if (interval) clearInterval(interval);
-									sseClients.delete(controller);
-								}
-							}, 15000);
-						},
-						cancel(_reason) {
-							if (controllerRef) sseClients.delete(controllerRef);
-							if (interval) clearInterval(interval);
-						},
-					});
+	const server = createServer((req, res) => {
+		const url = new URL(req.url ?? "/", "http://localhost");
+		const pathname = url.pathname;
 
-					return new Response(stream, {
-						headers: {
-							"Content-Type": "text/event-stream",
-							"Cache-Control": "no-cache",
-							Connection: "keep-alive",
-						},
-					});
-				},
-			},
-		},
-		development:
-			process.env.NODE_ENV === "development"
-				? {
-						hmr: true,
-						console: true,
-					}
-				: false,
+		const fail = (message: string) => {
+			console.error("Request error:", message);
+			if (!res.headersSent) sendError(res, 500, "Internal server error");
+			else res.end();
+		};
+		if (pathname === "/api/files") {
+			handleApiFiles(req, res).catch((error) =>
+				fail(error instanceof Error ? error.message : String(error)),
+			);
+			return;
+		}
+		if (pathname === "/api/file") {
+			handleApiFile(req, res).catch((error) =>
+				fail(error instanceof Error ? error.message : String(error)),
+			);
+			return;
+		}
+		if (pathname === "/api/share") {
+			handleApiShare(req, res).catch((error) =>
+				fail(error instanceof Error ? error.message : String(error)),
+			);
+			return;
+		}
+		if (pathname === "/api/last-document") {
+			handleApiLastDocument(req, res).catch((error) =>
+				fail(error instanceof Error ? error.message : String(error)),
+			);
+			return;
+		}
+		if (pathname === "/api/watch") {
+			try {
+				handleApiWatch(req, res);
+			} catch (error) {
+				fail(error instanceof Error ? error.message : String(error));
+			}
+			return;
+		}
+		if (pathname === "/" && req.method === "GET") {
+			res.writeHead(200, {
+				"Content-Type": "text/html; charset=utf-8",
+				"Content-Length": Buffer.byteLength(FRONTEND_HTML),
+			});
+			res.end(FRONTEND_HTML);
+			return;
+		}
+
+		sendError(res, 404, "Not found");
 	});
 
+	// SSE connections must never time out.
+	server.requestTimeout = 0;
+	server.headersTimeout = 0;
+	server.timeout = 0;
+
+	server.listen(port);
 	return server;
 }

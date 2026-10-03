@@ -1,5 +1,136 @@
+import { spawnSync } from "node:child_process";
+import { existsSync, type Stats } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { delimiter, join, relative, resolve } from "node:path";
+
+const REGEX_SPECIALS = /[.+^$()|\\]/g;
+
+/** Convert a glob pattern to a RegExp matching posix-style relative paths. */
+function globToRegExp(pattern: string): RegExp {
+	const posix = toPosixPath(pattern);
+	let out = "^";
+	let i = 0;
+	while (i < posix.length) {
+		const char = posix[i];
+		if (char === "*") {
+			if (posix[i + 1] === "*") {
+				// "**/" matches zero or more directories; "**" matches anything.
+				if (posix[i + 2] === "/") {
+					out += "(?:.*/)?";
+					i += 3;
+				} else {
+					out += ".*";
+					i += 2;
+				}
+			} else {
+				out += "[^/]*";
+				i += 1;
+			}
+			continue;
+		}
+		if (char === "?") {
+			out += "[^/]";
+			i += 1;
+			continue;
+		}
+		if (char === "[") {
+			const end = posix.indexOf("]", i + 1);
+			if (end === -1) {
+				out += "\\[";
+				i += 1;
+				continue;
+			}
+			let cls = posix.slice(i + 1, end);
+			if (cls.startsWith("!")) cls = "^" + cls.slice(1);
+			out += `[${cls}]`;
+			i = end + 1;
+			continue;
+		}
+		if (char === "{") {
+			const end = posix.indexOf("}", i + 1);
+			if (end === -1) {
+				out += "\\{";
+				i += 1;
+				continue;
+			}
+			const alternatives = posix
+				.slice(i + 1, end)
+				.split(",")
+				.map((alt) => alt.replace(REGEX_SPECIALS, "\\$&"));
+			out += `(?:${alternatives.join("|")})`;
+			i = end + 1;
+			continue;
+		}
+		if (char && REGEX_SPECIALS.test(char)) {
+			REGEX_SPECIALS.lastIndex = 0;
+			out += `\\${char}`;
+		} else if (char) {
+			out += char;
+		}
+		i += 1;
+	}
+	out += "$";
+	return new RegExp(out);
+}
+
+/** Static directory prefix of a glob pattern (before the first magic char). */
+function globBaseDir(pattern: string): string {
+	const posix = toPosixPath(pattern);
+	const idx = posix.search(/[*?[\]{}()!]/);
+	const prefix = idx === -1 ? posix : posix.slice(0, idx);
+	const lastSlash = prefix.lastIndexOf("/");
+	const base = lastSlash === -1 ? "." : prefix.slice(0, lastSlash);
+	return base || ".";
+}
+
+/** Minimal glob scan replacement (Bun.Glob / fs.glob are unavailable here). */
+async function globScan(pattern: string, cwd: string): Promise<string[]> {
+	const regex = globToRegExp(pattern);
+	const baseDir = resolve(cwd, globBaseDir(pattern));
+	const matches: string[] = [];
+
+	async function walk(dir: string): Promise<void> {
+		let names;
+		try {
+			names = await readdir(dir);
+		} catch {
+			return;
+		}
+		for (const name of names) {
+			// Mirror Bun.Glob: never descend into dot-directories.
+			if (name.startsWith(".")) continue;
+			const abs = join(dir, name);
+			const rel = toPosixPath(relative(cwd, abs));
+			if (regex.test(rel)) matches.push(rel);
+			try {
+				const lst = await lstat(abs);
+				if (lst.isDirectory()) await walk(abs);
+			} catch {
+				// skip unreadable entries
+			}
+		}
+	}
+
+	await walk(baseDir);
+	return matches;
+}
+
+function which(command: string): string | null {
+	const pathEnv = process.env.PATH;
+	if (!pathEnv) return null;
+	const exts =
+		process.platform === "win32"
+			? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";")
+			: [""];
+	for (const dir of pathEnv.split(delimiter)) {
+		if (!dir) continue;
+		for (const ext of exts) {
+			const candidate = join(dir, command + ext);
+			if (existsSync(candidate)) return candidate;
+		}
+	}
+	return null;
+}
 
 type DiscoverOptions = {
 	cwd: string;
@@ -35,20 +166,27 @@ async function scanDirectory(
 	options: Pick<DiscoverOptions, "recursive" | "includeHidden">,
 	out: Set<string>,
 ) {
-	const entries = await readdir(dir, { withFileTypes: true });
+	const names = await readdir(dir);
 
-	for (const entry of entries) {
-		if (!options.includeHidden && entry.name.startsWith(".")) continue;
-		const absolutePath = resolve(dir, entry.name);
+	for (const name of names) {
+		if (!options.includeHidden && name.startsWith(".")) continue;
+		const absolutePath = resolve(dir, name);
 
-		if (entry.isDirectory()) {
+		let lst: Stats;
+		try {
+			lst = await lstat(absolutePath);
+		} catch {
+			continue;
+		}
+
+		if (lst.isDirectory()) {
 			if (!options.recursive) continue;
 			await scanDirectory(absolutePath, options, out);
 			continue;
 		}
 
-		if (entry.isFile() || entry.isSymbolicLink()) {
-			if (!isMarkdownPath(entry.name)) continue;
+		if (lst.isFile() || lst.isSymbolicLink()) {
+			if (!isMarkdownPath(name)) continue;
 			out.add(absolutePath);
 		}
 	}
@@ -84,16 +222,15 @@ async function filterGitIgnored(
 ) {
 	if (absolutePaths.length === 0) return absolutePaths;
 	if (includeIgnored) return absolutePaths;
-	if (!Bun.which("git")) return absolutePaths;
+	if (!which("git")) return absolutePaths;
 
-	const toplevel = Bun.spawnSync(["git", "rev-parse", "--show-toplevel"], {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
+	const toplevel = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
 	});
 
-	if (toplevel.exitCode !== 0) return absolutePaths;
-	const repoRoot = toplevel.stdout.toString().trim();
+	if (toplevel.status !== 0) return absolutePaths;
+	const repoRoot = toplevel.stdout.trim();
 	if (!repoRoot) return absolutePaths;
 
 	const relCandidates: string[] = [];
@@ -108,17 +245,20 @@ async function filterGitIgnored(
 
 	if (relCandidates.length === 0) return absolutePaths;
 
-	const input = new TextEncoder().encode(relCandidates.join("\0"));
-	const ignored = Bun.spawnSync(["git", "check-ignore", "-z", "--stdin"], {
-		cwd: repoRoot,
-		stdin: input,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+	// Pass candidates as pathspec args instead of --stdin: scriptc's
+	// spawnSync lowering does not support the `input` option.
+	const ignored = spawnSync(
+		"git",
+		["-C", repoRoot, "check-ignore", "-z", "--", ...relCandidates],
+		{
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+		},
+	);
 
-	if (ignored.exitCode !== 0 && ignored.exitCode !== 1) return absolutePaths;
+	if (ignored.status !== 0 && ignored.status !== 1) return absolutePaths;
 
-	const ignoredRel = ignored.stdout.toString().split("\0").filter(Boolean);
+	const ignoredRel = ignored.stdout.split("\0").filter(Boolean);
 	const ignoredSet = new Set<string>(ignoredRel);
 
 	return absolutePaths.filter((abs) => {
@@ -137,9 +277,8 @@ export async function discoverMarkdownFiles(
 
 	for (const input of inputs) {
 		if (isGlobPattern(input)) {
-			const glob = new Bun.Glob(input);
 			const matches: string[] = [];
-			for await (const match of glob.scan({ cwd: options.cwd })) {
+			for (const match of await globScan(input, options.cwd)) {
 				matches.push(resolve(options.cwd, match));
 			}
 			for (const p of filterByMarkdown(filterByHidden(matches, options))) {
@@ -149,7 +288,7 @@ export async function discoverMarkdownFiles(
 		}
 
 		const absolutePath = resolve(options.cwd, input);
-		let stat: Awaited<ReturnType<typeof lstat>>;
+		let stat: Stats;
 		try {
 			stat = await lstat(absolutePath);
 		} catch {

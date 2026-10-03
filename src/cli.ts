@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { parseCliArgs } from "./cli-args";
 import { discoverMarkdownFiles } from "./lib/file-discovery";
 import { startServer } from "./server";
@@ -101,7 +102,10 @@ async function main() {
 		},
 		port,
 	);
-	const url = `http://localhost:${server.port}`;
+	// parseCliArgs guarantees a concrete port (default 3000, range 1-65535),
+	// so the configured port is always the bound port.
+	void server;
+	const url = `http://localhost:${port}`;
 
 	console.log(`
   Viewing: ${discovered.length} file${discovered.length === 1 ? "" : "s"}
@@ -112,14 +116,19 @@ async function main() {
 
 	// Open browser
 	if (autoOpen) {
-		const opener =
-			process.platform === "darwin"
-				? "open"
-				: process.platform === "win32"
-					? "start"
-					: "xdg-open";
-
-		Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });
+		if (process.platform === "win32") {
+			// scriptc: shell commands must be a single string, no separate args.
+			spawn(`start "" "${url}"`, [], {
+				stdio: "ignore",
+				shell: true,
+			}).unref();
+		} else {
+			const opener = process.platform === "darwin" ? "open" : "xdg-open";
+			spawn(opener, [url], {
+				stdio: "ignore",
+				detached: true,
+			}).unref();
+		}
 	}
 }
 

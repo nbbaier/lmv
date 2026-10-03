@@ -35,3 +35,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Amp orb portal metadata
 .amp/portals/*
+src/frontend.generated.ts
+cli
+dist-web/
+cli.ll

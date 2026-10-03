@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, symlink, unlink, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, unlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer } from "./server";
@@ -19,12 +19,41 @@ function isFilesResponse(value: unknown): value is FilesResponse {
 	return "singleFile" in value && "files" in value && Array.isArray(value.files);
 }
 
+async function serverPort(server: ReturnType<typeof startServer>) {
+	if (!server.listening) {
+		await new Promise<void>((resolve, reject) => {
+			server.once("listening", () => resolve());
+			server.once("error", reject);
+		});
+	}
+	const address = server.address();
+	if (typeof address !== "object" || !address) {
+		throw new Error("Server has no address");
+	}
+	return address.port;
+}
+
+async function fetchServer(
+	server: ReturnType<typeof startServer>,
+	path: string,
+	init?: RequestInit,
+) {
+	return fetch(`http://localhost:${await serverPort(server)}${path}`, init);
+}
+
 describe("file API", () => {
 	let server: ReturnType<typeof startServer> | undefined;
 	let directory: string | undefined;
 
 	afterEach(async () => {
-		server?.stop(true);
+		if (server) {
+			server.closeAllConnections();
+			if (server.listening) {
+				await new Promise<void>((resolve, reject) => {
+					server?.close((err) => (err ? reject(err) : resolve()));
+				});
+			}
+		}
 		if (directory) await rm(directory, { recursive: true, force: true });
 		server = undefined;
 		directory = undefined;
@@ -54,9 +83,7 @@ describe("file API", () => {
 		await unlink(deletedPath);
 		await writeFile(join(directory, "added.md"), "added");
 
-		const response = await fetch(
-			`http://localhost:${server.port}/api/files?refresh=1`,
-		);
+		const response = await fetchServer(server, "/api/files?refresh=1");
 		const body: unknown = await response.json();
 		expect(isFilesResponse(body)).toBe(true);
 		if (!isFilesResponse(body)) return;
@@ -66,8 +93,9 @@ describe("file API", () => {
 		]);
 		expect(body.singleFile).toBe(false);
 
-		const deletedFileResponse = await fetch(
-			`http://localhost:${server.port}/api/file?path=deleted.md`,
+		const deletedFileResponse = await fetchServer(
+			server,
+			"/api/file?path=deleted.md",
 		);
 		expect(deletedFileResponse.status).toBe(403);
 	});
@@ -76,7 +104,7 @@ describe("file API", () => {
 		directory = await mkdtemp(join(tmpdir(), "lmv-server-"));
 		const sourcePath = join(directory, "single.md");
 		const original = new TextEncoder().encode("# Original\r\n\r\nByte stable.\n");
-		await Bun.write(sourcePath, original);
+		await writeFile(sourcePath, original);
 
 		server = startServer(
 			{
@@ -91,27 +119,21 @@ describe("file API", () => {
 		);
 
 		for (const query of ["", "?path=single.md"]) {
-			const response = await fetch(
-				`http://localhost:${server.port}/api/file${query}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ content: "replacement" }),
-				},
-			);
+			const response = await fetchServer(server, `/api/file${query}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ content: "replacement" }),
+			});
 			expect(response.status).toBe(404);
-			expect(await Bun.file(sourcePath).bytes()).toEqual(original);
+			expect(new Uint8Array(await readFile(sourcePath))).toEqual(original);
 		}
 
 		await unlink(sourcePath);
-		const recreateResponse = await fetch(
-			`http://localhost:${server.port}/api/file`,
-			{
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ content: "recreated" }),
-			},
-		);
+		const recreateResponse = await fetchServer(server, "/api/file", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "recreated" }),
+		});
 		expect(recreateResponse.status).toBe(404);
 		expect(await Bun.file(sourcePath).exists()).toBe(false);
 	});
@@ -125,9 +147,9 @@ describe("file API", () => {
 		const secondOriginal = new TextEncoder().encode("second\n");
 		const disallowedOriginal = new TextEncoder().encode("outside allowlist\n");
 		await Promise.all([
-			Bun.write(firstPath, firstOriginal),
-			Bun.write(secondPath, secondOriginal),
-			Bun.write(disallowedPath, disallowedOriginal),
+			writeFile(firstPath, firstOriginal),
+			writeFile(secondPath, secondOriginal),
+			writeFile(disallowedPath, disallowedOriginal),
 		]);
 
 		server = startServer(
@@ -148,14 +170,11 @@ describe("file API", () => {
 			"?path=disallowed.md",
 			"?path=new.md",
 		]) {
-			const response = await fetch(
-				`http://localhost:${server.port}/api/file${query}`,
-				{
-					method: "PUT",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ content: "replacement" }),
-				},
-			);
+			const response = await fetchServer(server, `/api/file${query}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ content: "replacement" }),
+			});
 			expect(response.status).toBe(404);
 		}
 
@@ -194,7 +213,7 @@ describe("file API", () => {
 			0,
 		);
 
-		const response = await fetch(`http://localhost:${server.port}/api/files`);
+		const response = await fetchServer(server, "/api/files");
 		const body: unknown = await response.json();
 		expect(isFilesResponse(body)).toBe(true);
 		if (!isFilesResponse(body)) return;
