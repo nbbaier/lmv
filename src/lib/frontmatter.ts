@@ -11,12 +11,12 @@ const FRONTMATTER_RE = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/;
 
 export function parseFrontmatter(raw: string): ParsedContent {
 	const match = raw.match(FRONTMATTER_RE);
-	if (!match) {
+	if (!match || match[1] === undefined) {
 		return { frontmatter: null, body: raw };
 	}
 
 	try {
-		const parsed = parse(match[1]!);
+		const parsed = parse(match[1]);
 		if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
 			return { frontmatter: null, body: raw };
 		}

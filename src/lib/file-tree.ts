@@ -93,13 +93,13 @@ export function buildFileTree(files: ApiFile[], sortOrder: SortOrder) {
 
 	for (const file of files) {
 		const segments = pathSegments(file.path);
-		if (segments.length === 0) continue;
+		const name = segments.pop();
+		if (name === undefined) continue;
 
 		let currentPath = "";
 		let parent = root;
 
-		for (let i = 0; i < segments.length - 1; i++) {
-			const seg = segments[i]!;
+		for (const seg of segments) {
 			const folderPath = currentPath ? `${currentPath}/${seg}` : seg;
 			currentPath = folderPath;
 
@@ -119,7 +119,6 @@ export function buildFileTree(files: ApiFile[], sortOrder: SortOrder) {
 			parent = folder;
 		}
 
-		const name = segments[segments.length - 1]!;
 		parent.children.push({
 			kind: "file",
 			path: normalizePath(file.path),

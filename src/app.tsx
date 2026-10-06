@@ -1013,7 +1013,7 @@ export function App() {
 					>
 						<Minimize2 />
 						<span>Exit focus</span>
-						<kbd aria-hidden="true" className="ml-1 font-mono text-[10px] text-foreground">
+						<kbd className="ml-1 font-mono text-[10px] text-foreground">
 							Esc
 						</kbd>
 					</Button>

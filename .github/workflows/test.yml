@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check and test
+      - name: Lint, type check, and test
         run: bun run check
 
       - name: Test CLI help
