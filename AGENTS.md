@@ -5,7 +5,7 @@ CLI tool for viewing local markdown files in the browser. Bun + React 19 + Tailw
 ## Where to look
 
 For a change spanning files, follow the path in order. Test pointers describe
-existing coverage; use browser checks for UI behavior.
+existing coverage.
 
 | Task | Implementation path | Relevant checks |
 | --- | --- | --- |
@@ -26,9 +26,8 @@ existing coverage; use browser checks for UI behavior.
 
 Use Bun exclusively:
 
-- `bun <file>` instead of `node`/`ts-node`; `bun test` instead of jest/vitest; `bun install`, `bun run <script>`, `bun build`
-- `Bun.serve()` for the server (supports routes, WebSockets, HTML imports) — no Express, no Vite
-- Frontend is served via HTML imports: `index.html` imports `.tsx` directly and Bun bundles/transpiles automatically
+- `Bun.serve()` for the server (supports routes, WebSockets, HTML imports) instead of Express
+- Frontend is served via HTML imports instead of Vite: `index.html` imports `.tsx` directly and Bun bundles/transpiles automatically
 - Prefer `Bun.file` over `node:fs` readFile/writeFile; `Bun.$` for shell commands
 - Bun auto-loads `.env` — don't use dotenv
 - Full Bun API docs: `node_modules/bun-types/docs/**.md`
@@ -41,46 +40,36 @@ Use Bun exclusively:
 
 ## Anti-patterns
 
-| Pattern               | Reason                                       |
-| --------------------- | -------------------------------------------- |
-| `as Type` assertions  | Violates type safety; use runtime validation |
-| Non-null `!` operator | Use null checks (biome-ignore only with justification) |
-| `any` type            | Never acceptable                             |
-| Express/Vite          | Use Bun.serve() and HTML imports             |
+- Validate untyped data at runtime instead of using `as Type` assertions; Biome does not catch these (it already rejects `any` and `!`)
 
 ### Known violations (technical debt)
 
-- `src/server.ts` — type assertions on request/response bodies (lines ~212, ~327–328, ~364)
+- `src/server.ts` `POST /api/share` handler — `as` assertions on the request body and the Gist API response
 
 ## Commands
 
 ```bash
 bun run dev         # Start dev server with HMR
-bun run build       # Build binary for current platform
-bun run build:all   # Cross-compile all targets (darwin/linux)
-bun run check       # Lint, type check, and run tests (same command as CI)
-bun run lint        # Biome lint; warnings fail the command
-bun run format      # Opt-in Biome formatting
+bun run check       # The CI gate: lint (warnings fail), type check, tests; CI runs it on Linux and macOS plus smoke tests
+bun run format      # Opt-in Biome formatting; not part of check
 ```
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live in GitHub Issues (`nbbaier/lmv`), managed via the `gh` CLI. External PRs are not treated as a triage surface. See `docs/agents/issue-tracker.md`.
+GitHub Issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — no custom mapping. See `docs/agents/triage-labels.md`.
+Default label vocabulary. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+`GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 ## Notes
 
-- `biome.json` owns lint rules and formatter settings for TypeScript/TSX and root JSON files; targeted suppressions explain intentional exceptions
-- `bun test` covers CLI, server, and pure UI helpers; CI runs `bun run check` on Linux and macOS, plus smoke tests
 - GitHub Gist sharing requires `GITHUB_TOKEN` env var
 - Opened Markdown source files are read-only: there is no `PUT /api/file` route
 - `module` field in package.json points to the CLI entry (atypical)
