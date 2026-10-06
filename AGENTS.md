@@ -20,7 +20,7 @@ existing coverage; use browser checks for UI behavior.
 | Watch/reload/refresh | watchers, `rescan`, `/api/watch` in `src/server.ts` → `EventSource` handlers in `src/app.tsx` | `src/server.test.ts` covers refresh allowlist; browser checks for watch events/reload |
 | Markdown appearance, theme, shell layout | `docs/agents/styling.md` maps CSS and component ownership | Browser with `docs/demo.md` |
 | Frontmatter parsing/display | `src/lib/frontmatter.ts` → `src/components/frontmatter.tsx` → `src/app.tsx` | Browser with `docs/demo.md` |
-| Binary build/install | Current-platform command in `package.json`; cross-platform builds in `scripts/build.ts`; optimized install in `scripts/copy-optimized.ts` | Build and run the resulting binary |
+| Binary build/install, missing browser assets | `docs/agents/runtime-debugging.md` distinguishes dev/built/installed binaries; build scripts in `package.json` and `scripts/` | `bun run build && bun run smoke:binary`; browser checks for rendering |
 
 ## Runtime: Bun (not Node.js)
 
