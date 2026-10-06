@@ -3,7 +3,7 @@
 This document describes the implemented viewer and supersedes the original feature
 proposal, retained in Git history. Historical design notes below explain changed
 requirements. Use the implementation and check pointers here or in
-[AGENTS.md](../AGENTS.md) when changing this feature.
+[`docs/agents/navigation.md`](agents/navigation.md) when changing this feature.
 
 ## Inputs and discovery
 
