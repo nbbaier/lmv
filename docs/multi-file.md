@@ -100,7 +100,7 @@ subscribes with `EventSource`.
 | Event | Behavior |
 | --- | --- |
 | `ready` | The SSE stream has connected |
-| `file-changed` with an allowlisted path | Reload if the path is still selected; successful reads replace content and show a toast |
+| `file-changed` with an allowlisted path | Emitted for paths that pass watcher filtering; reload if still selected, replacing content and showing a toast on success |
 | `fs-changed` with `pendingRefresh` | Update the refresh indicator without adding new files automatically |
 
 Watch roots derive from the original inputs: directory inputs use the recursive
@@ -109,8 +109,13 @@ with recursive watching for `**`. Watch setup/runtime errors are ignored, so
 automatic updates depend on watcher support. A notification for a new path does
 not guarantee that it will survive discovery filtering.
 
-An event for an unallowlisted markdown path, or without a filename, marks refresh
-pending. Clicking the sidebar refresh button requests `/api/files?refresh=1`.
+Without `--hidden`, watcher callbacks discard hidden paths before checking the
+allowlist. Explicitly naming a hidden Markdown file permits viewing it, but
+`--hidden` is required for automatic updates to that file.
+
+An event for an unallowlisted markdown path that passes watcher filtering, or an
+event without a filename, marks refresh pending. Clicking the sidebar refresh
+button requests `/api/files?refresh=1`.
 A successful rescan replaces the allowlist and clears the pending flag, adding
 new matches and removing deleted paths. Metadata is collected on file-list
 requests; notifications alone do not update sidebar metadata.
