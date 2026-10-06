@@ -2,34 +2,25 @@
 
 CLI tool for viewing local markdown files in the browser. Bun + React 19 + Tailwind v4.
 
-## Structure
-
-```
-lmv/
-├── src/
-│   ├── cli.ts          # CLI entry (parses args, spawns server)
-│   ├── server.ts       # Bun.serve() backend + API routes
-│   ├── index.html      # HTML entry, active CSS, Tailwind CDN, highlight theme CSS
-│   ├── main.tsx        # React root mount
-│   ├── app.tsx         # Main UI (largest file)
-│   ├── components/     # shadcn/ui pattern (button, sidebar, toc, frontmatter, tooltip)
-│   └── lib/            # file-discovery, file-tree, frontmatter, state, utils (cn helper)
-├── scripts/build.ts    # Cross-platform binary builder
-└── docs/               # Specs and agent docs
-```
-
 ## Where to look
 
-| Task          | Location           | Notes                          |
-| ------------- | ------------------ | ------------------------------ |
-| CLI args/help | `src/cli.ts`       | port, --no-open                |
-| API routes    | `src/server.ts`    | GET /api/file, /api/files, /api/share |
-| UI logic      | `src/app.tsx`      | viewing, theme, gist sharing   |
-| Markdown appearance | `src/index.html` | `.markdown-content` rules; see `docs/agents/styling.md` |
-| Shell layout | `src/app.tsx`, `src/components/` | Tailwind classes; shared `.document-*` rules in `src/index.html` |
-| Add component | `src/components/`  | cva + Radix pattern            |
-| File tree/discovery | `src/lib/`   | sidebar data layer             |
-| Build binary  | `scripts/build.ts` | darwin/linux targets           |
+For a change spanning files, follow the path in order. Test pointers describe
+existing coverage; use browser checks for UI behavior.
+
+| Task | Implementation path | Relevant checks |
+| --- | --- | --- |
+| CLI parsing/help | `src/cli-args.ts` (`parseCliArgs`) → `src/cli.ts` (help, startup) | `src/cli-args.test.ts`, `src/cli.test.ts` |
+| Discovery option (hidden, ignored, recursive) | CLI path above → `src/lib/file-discovery.ts` (`discoverMarkdownFiles`) → `src/server.ts` (`StartServerConfig`, `rescan`); propagate options to both initial discovery and rescans | CLI tests above; `src/server.test.ts` covers refresh; manually check option-specific discovery |
+| File API, allowlist, Gist sharing | `src/server.ts` routes → fetch handlers in `src/app.tsx` | `src/server.test.ts` covers file API; sharing needs manual verification |
+| Sidebar tree, sorting, filtering, keyboard navigation | `src/lib/file-tree.ts` → `src/components/sidebar.tsx` → selection/search state in `src/app.tsx` | `src/lib/file-tree.test.ts`; browser keyboard/mobile checks |
+| Code highlighting | `src/lib/syntax-highlighting.ts` (`rehypeHighlight`, bundled grammars) → `src/app.tsx` renderer | `src/lib/syntax-highlighting.test.ts` |
+| TOC headings, IDs, active section | `src/lib/table-of-contents.ts` → `src/components/toc.tsx`; heading renderer in `src/app.tsx` uses the same slug helper | `src/lib/table-of-contents.test.ts`; browser scroll/link checks |
+| Focus mode | `src/lib/focus-mode.ts` → keyboard handling and shell visibility in `src/app.tsx` | `src/lib/focus-mode.test.ts`; browser focus checks |
+| Last document persistence | `src/lib/state.ts` → `/api/last-document` in `src/server.ts` → startup/selection effects in `src/app.tsx` | Manually reopen the same directory; no direct persistence tests |
+| Watch/reload/refresh | watchers, `rescan`, `/api/watch` in `src/server.ts` → `EventSource` handlers in `src/app.tsx` | `src/server.test.ts` covers refresh allowlist; browser checks for watch events/reload |
+| Markdown appearance, theme, shell layout | `docs/agents/styling.md` maps CSS and component ownership | Browser with `docs/demo.md` |
+| Frontmatter parsing/display | `src/lib/frontmatter.ts` → `src/components/frontmatter.tsx` → `src/app.tsx` | Browser with `docs/demo.md` |
+| Binary build/install | Current-platform command in `package.json`; cross-platform builds in `scripts/build.ts`; optimized install in `scripts/copy-optimized.ts` | Build and run the resulting binary |
 
 ## Runtime: Bun (not Node.js)
 
@@ -45,8 +36,7 @@ Use Bun exclusively:
 ## Conventions
 
 - **Components**: shadcn/ui style — Radix primitives + cva variants, `cn()` (clsx + tailwind-merge) for class conflicts
-- **Styling**: For CSS ownership, theme tokens, and dev/compiled rendering, read `docs/agents/styling.md`.
-- **Markdown**: react-markdown + remark-gfm + rehype-highlight; mermaid diagrams via `beautiful-mermaid` (SVG-only, dark-mode theme)
+- **Markdown**: react-markdown + remark-gfm + the custom highlighting plugin mapped above; mermaid diagrams via `beautiful-mermaid` (SVG-only, dark-mode theme)
 - **Strict TS**: `noUncheckedIndexedAccess: true` — index access returns `T | undefined`
 
 ## Anti-patterns
