@@ -25,27 +25,28 @@ lmv docs/ --hidden --ignored
 - Git-ignore filtering uses `git check-ignore` when Git is available and the
   working directory is inside a repository. `--ignored` bypasses it; hidden-path
   filtering is separate.
-- Missing explicit inputs fail startup, as does finding no files. Refresh rescans
-  tolerate missing inputs.
-- More than 500 files on initial list load produces an informational toast without
-  preventing loading.
+- Missing explicit inputs fail startup, as does finding no files. A refresh
+  tolerates missing inputs.
+- A file set of more than 500 files on initial load produces an informational
+  toast without preventing loading.
 
 Parsing lives in [src/cli-args.ts](../src/cli-args.ts), help and startup in
 [src/cli.ts](../src/cli.ts), and discovery in
 [src/lib/file-discovery.ts](../src/lib/file-discovery.ts). Options must also reach
-`StartServerConfig` and `rescan` in [src/server.ts](../src/server.ts).
+`StartServerConfig` and `rescan` (the refresh implementation) in
+[src/server.ts](../src/server.ts).
 
 ## Startup, selection, and persistence
 
-| Discovered file set | Initial behavior |
+| File set | Initial behavior |
 | --- | --- |
-| Exactly one file | Auto-select it; omit the sidebar and file search |
-| Multiple files with a valid saved document for this working directory | Restore it and expand its parent folders |
-| Multiple files without a valid saved document | Show “Select a file to view” until selection |
+| Exactly one file | Single-file view: auto-select it; omit the sidebar and file filter |
+| Multiple files with a valid last document for this working directory | Restore it and expand its parent folders |
+| Multiple files without a valid last document | Show “Select a file to view” until selection |
 
-The sidebar is rendered when `files.length > 1`, regardless of how many CLI
-arguments were supplied. Single-file viewing retains the document's readable
-width rather than stretching prose across the viewport.
+The sidebar is rendered when `files.length > 1`, regardless of how many inputs
+were supplied. Single-file view retains the document's readable width rather
+than stretching prose across the viewport.
 
 `selectedPath` identifies the document; `cursorPath` identifies the tree's keyboard
 cursor. Selecting a different file starts a read without a save prompt, cancels
@@ -55,27 +56,29 @@ resets scroll position and clears an existing heading hash.
 Selection is persisted through `/api/last-document`, keyed by the server's working
 directory. [src/lib/state.ts](../src/lib/state.ts) stores it in
 `$XDG_DATA_HOME/lmv/state.json`, falling back to `~/.local/share/lmv/state.json`.
-The API returns a saved path only if it is allowlisted; the app also checks it
-against its current file list. Persistence failures do not block viewing.
+The API returns the last document only if it is in the file set; the app also
+checks it against the file set it has loaded. Persistence failures do not block
+viewing.
 
 Sidebar visibility, width fraction, sort order, and theme use localStorage.
-Filter text, expanded folders, and focus mode are page state. Focus mode hides the
-shell and TOC while preserving sidebar preferences; file search exits focus mode.
+The file filter query, expanded folders, and focus mode are page state. Focus mode
+hides the shell and TOC while preserving sidebar preferences; opening the file
+filter exits focus mode.
 
-## Sidebar and search
+## Sidebar and file filter
 
 - Rows show names, selection highlighting, symlink indicators, and metadata errors.
   Top-level folders start expanded; restoring a document expands its ancestors.
 - Sort choices are name ascending/descending and modified newest/oldest. Folders
   precede files and use the newest descendant's modification time for date sorting.
   Name ascending is the default; the preference is persisted.
-- Top-bar search matches paths case-insensitively, filters immediately, and
-  auto-expands matching ancestors. Focusing search opens the sidebar. It searches
-  file paths, not document contents.
+- The top-bar file filter matches paths case-insensitively, narrows the tree
+  immediately, and auto-expands matching ancestors. Focusing the file filter opens
+  the sidebar. It matches file paths, not document contents.
 - Desktop width is a persisted viewport fraction with size bounds. The resize
   separator supports dragging and Left/Right keys; Shift increases the keyboard
   step, and double-click resets the fraction to 0.25.
-- The mobile sidebar is an overlay drawer closed by file selection or dismissal.
+- On narrow screens the sidebar is a drawer, closed by file selection or dismissal.
   The document is inert while a rendered drawer is open outside focus mode.
 - On wide screens, folder breadcrumbs expand and scroll to the folder in the tree.
 
@@ -84,13 +87,13 @@ items stay outside the sequential tab order.
 
 | Shortcut | Action |
 | --- | --- |
-| Cmd/Ctrl+B | Toggle the browser with multiple files; in focus mode, exit and open it |
-| Cmd/Ctrl+K or `/` | Open file search with multiple files; `/` applies outside editable controls |
+| Cmd/Ctrl+B | Toggle the sidebar with multiple files; in focus mode, exit and open it |
+| Cmd/Ctrl+K or `/` | Open the file filter with multiple files; `/` applies outside editable controls |
 | Up/Down, Home/End in the tree | Move the cursor among visible rows |
 | Right/Left in the tree | Expand/enter folders or collapse/move to the parent |
 | Enter in the tree | Toggle the cursor's folder or open its file |
-| Down in search | Move focus to the tree |
-| Escape in search | Clear the query, or blur if it is already empty |
+| Down in the file filter | Move focus to the tree |
+| Escape in the file filter | Clear the query, or blur if it is already empty |
 
 ## Watching, reloads, and refresh
 
@@ -100,7 +103,7 @@ subscribes with `EventSource`.
 | Event | Behavior |
 | --- | --- |
 | `ready` | The SSE stream has connected |
-| `file-changed` with an allowlisted path | Emitted for paths that pass watcher filtering; reload if still selected, replacing content and showing a toast on success |
+| `file-changed` with a path in the file set | Emitted for paths that pass watcher filtering; reload if it is still the document, replacing content and showing a toast on success |
 | `fs-changed` with `pendingRefresh` | Update the refresh indicator without adding new files automatically |
 
 Watch roots derive from the original inputs: directory inputs use the recursive
@@ -110,22 +113,22 @@ automatic updates depend on watcher support. A notification for a new path does
 not guarantee that it will survive discovery filtering.
 
 Without `--hidden`, watcher callbacks discard hidden paths before checking the
-allowlist. Explicitly naming a hidden Markdown file permits viewing it, but
-`--hidden` is required for automatic updates to that file.
+file set. Explicitly naming a hidden Markdown file permits viewing it, but
+`--hidden` is required for automatic reloads of that file.
 
-An event for an unallowlisted markdown path that passes watcher filtering, or an
-event without a filename, marks refresh pending. Clicking the sidebar refresh
-button requests `/api/files?refresh=1`.
-A successful rescan replaces the allowlist and clears the pending flag, adding
-new matches and removing deleted paths. Metadata is collected on file-list
+An event for a Markdown path outside the file set that passes watcher filtering,
+or an event without a filename, sets a pending refresh. Clicking the sidebar
+refresh button requests `/api/files?refresh=1`.
+A successful refresh replaces the file set and clears the pending refresh, adding
+new matches and removing deleted paths. Metadata is collected on file-set
 requests; notifications alone do not update sidebar metadata.
 
-Before a rescan, inaccessible/deleted paths can remain allowlisted. A list request
-reports metadata errors. Selecting an unreadable file shows an error toast and
-clears document content; a failed automatic reload shows an error toast and
-retains previously loaded content. A rescan can remove the selected path from the
-list without clearing `selectedPath` or the displayed content. Selecting another
-file updates the document normally.
+Before a refresh, inaccessible/deleted paths can remain in the file set. A
+file-set request reports metadata errors. Selecting an unreadable file shows an
+error toast and clears document content; a failed automatic reload shows an error
+toast and retains previously loaded content. A refresh can remove the document's
+path from the file set without clearing `selectedPath` or the displayed content.
+Selecting another file updates the document normally.
 
 ## API and source handling
 
@@ -133,11 +136,11 @@ Routes live in [src/server.ts](../src/server.ts):
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/files` | List allowlisted paths with metadata, `singleFile`, and `pendingRefresh` |
-| `GET /api/files?refresh=1` (or `refresh=true`) | Rescan the original inputs/options, then list files |
-| `GET /api/file?path=<relativePath>` | Read an allowlisted file; single-file mode permits omitting `path` |
-| `GET /api/last-document` | Return a valid saved path for this working directory, or null |
-| `PUT /api/last-document` | Persist an allowlisted selection in LMV state |
+| `GET /api/files` | List the file set with metadata, `singleFile`, and `pendingRefresh` |
+| `GET /api/files?refresh=1` (or `refresh=true`) | Refresh from the original inputs/options, then list the file set |
+| `GET /api/file?path=<relativePath>` | Read a file in the file set; single-file view permits omitting `path` |
+| `GET /api/last-document` | Return the last document for this working directory if it is still valid, or null |
+| `PUT /api/last-document` | Persist the document as the last document, if it is in the file set |
 | `GET /api/watch` | SSE change and pending-refresh notifications |
 | `GET /api/share` | Report whether Gist sharing is configured |
 | `POST /api/share` | Share the currently loaded content and filename as a Gist |
@@ -154,16 +157,17 @@ Run `bun run check` for type checking and existing tests.
 | Concern | Implementation | Existing coverage |
 | --- | --- | --- |
 | CLI options/help | [src/cli-args.ts](../src/cli-args.ts), [src/cli.ts](../src/cli.ts) | [src/cli-args.test.ts](../src/cli-args.test.ts), [src/cli.test.ts](../src/cli.test.ts) |
-| Refresh allowlist, read-only source handling, metadata | [src/server.ts](../src/server.ts) | [src/server.test.ts](../src/server.test.ts) |
+| Refresh and file set, read-only source handling, metadata | [src/server.ts](../src/server.ts) | [src/server.test.ts](../src/server.test.ts) |
 | Tree construction, sorting, filtering, visible rows | [src/lib/file-tree.ts](../src/lib/file-tree.ts) | [src/lib/file-tree.test.ts](../src/lib/file-tree.test.ts) covers folder ordering and filtering/expansion |
 | Tree UI, `TreeRow`, sort select, resize separator, drawer | [src/components/sidebar.tsx](../src/components/sidebar.tsx) | Browser keyboard, pointer, and mobile checks |
-| Search, breadcrumbs, selection, restore/reload effects | [src/app.tsx](../src/app.tsx), [src/lib/state.ts](../src/lib/state.ts) | Manual restore/switch/watch checks; no direct persistence/watcher tests |
+| File filter, breadcrumbs, selection, restore/reload effects | [src/app.tsx](../src/app.tsx), [src/lib/state.ts](../src/lib/state.ts) | Manual restore/switch/watch checks; no direct persistence/watcher tests |
 | Focus shortcuts and shell hiding | [src/lib/focus-mode.ts](../src/lib/focus-mode.ts), [src/app.tsx](../src/app.tsx), [src/index.html](../src/index.html) | [src/lib/focus-mode.test.ts](../src/lib/focus-mode.test.ts) covers shortcuts; browser checks cover visibility/focus |
 
 For CSS ownership, see [docs/agents/styling.md](agents/styling.md). Use
 `bun run dev docs --recursive --no-open` for manual multi-file checks, then open the
-printed URL. Check valid/invalid saved selections, switching, search, keyboard
-navigation, resizing, mobile dismissal, and external changes followed by refresh.
+printed URL. Check valid/invalid last documents, switching, the file filter,
+keyboard navigation, resizing, drawer dismissal, and external changes followed by
+refresh.
 [docs/demo.md](demo.md) supplies rendering examples.
 
 ## Historical design notes
@@ -173,9 +177,9 @@ view, a choice of WebSocket or SSE notifications, and separate `FileTree`,
 `TreeNode`, `FilterInput`, `SortDropdown`, `ResizeHandle`, and `Breadcrumb`
 components. The current implementation instead restores valid selections, uses
 SSE, builds/filters/flattens tree data in `src/lib/file-tree.ts`, renders rows as
-`TreeRow` within `Sidebar`, and keeps search/breadcrumb markup in `App`.
+`TreeRow` within `Sidebar`, and keeps file filter/breadcrumb markup in `App`.
 
-The original request to retain deleted files applies only before a rescan;
+The original request to retain deleted files applies only before a refresh;
 refresh currently removes them. These notes record design evolution and do not
 instruct agents to reintroduce old requirements.
 
