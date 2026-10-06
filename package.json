@@ -8,6 +8,7 @@
 		"lmv": "./src/cli.ts"
 	},
 	"scripts": {
+		"check": "bun x tsc --noEmit && bun test",
 		"dev": "NODE_ENV=development bun run src/cli.ts",
 		"build": "bun build src/cli.ts --compile --production --outfile dist/lmv",
 		"build:all": "bun run scripts/build.ts",

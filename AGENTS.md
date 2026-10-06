@@ -68,7 +68,7 @@ Use Bun exclusively:
 bun run dev         # Start dev server with HMR
 bun run build       # Build binary for current platform
 bun run build:all   # Cross-compile all targets (darwin/linux)
-bun x tsc --noEmit  # Type check
+bun run check       # Type check and run tests (same command as CI)
 ```
 
 ## Agent skills
@@ -87,7 +87,7 @@ Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agen
 
 ## Notes
 
-- `bun test` covers server and pure UI helpers; CI currently runs typecheck + smoke tests
+- `bun test` covers CLI, server, and pure UI helpers; CI runs `bun run check` on Linux and macOS, plus smoke tests
 - GitHub Gist sharing requires `GITHUB_TOKEN` env var
 - Opened Markdown source files are read-only: there is no `PUT /api/file` route
 - `module` field in package.json points to the CLI entry (atypical)
