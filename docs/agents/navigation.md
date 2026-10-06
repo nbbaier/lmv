@@ -86,4 +86,6 @@ when multiple files are needed, then open the printed URL.
   installed binaries; build scripts are in `package.json` and `scripts/`.
 - The `module` field in `package.json` points to the CLI entry
   (`src/cli.ts`), which is atypical.
-- Checks: `bun run build && bun run smoke:binary`; browser checks for rendering
+- Checks: `bun run build && ./dist/lmv --help && bun run smoke:binary` (the CI
+  build job, which `bun run check` does not cover); browser checks for
+  rendering
