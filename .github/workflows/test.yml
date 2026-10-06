@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check
-        run: bun x tsc --noEmit
+      - name: Type check and test
+        run: bun run check
 
       - name: Test CLI help
         run: bun run src/cli.ts --help
