@@ -52,6 +52,7 @@ function formatValue(value: unknown): React.ReactNode {
 				<div className="flex flex-wrap gap-1.5">
 					{value.map((item, i) => (
 						<span
+							// biome-ignore lint/suspicious/noArrayIndexKey: Static YAML values may repeat; these rows have no component state.
 							key={`${i}-${item}`}
 							className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground ring-1 ring-inset ring-border"
 						>
@@ -65,6 +66,7 @@ function formatValue(value: unknown): React.ReactNode {
 		return (
 			<ul className="mt-1 space-y-1 text-sm">
 				{value.map((item, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: Static YAML values may repeat; these rows have no component state.
 					<li key={`${i}-${String(item)}`} className="flex items-start gap-1">
 						<span className="text-muted-foreground mt-0.5">-</span>
 						<span>{formatValue(item)}</span>

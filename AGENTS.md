@@ -58,7 +58,9 @@ Use Bun exclusively:
 bun run dev         # Start dev server with HMR
 bun run build       # Build binary for current platform
 bun run build:all   # Cross-compile all targets (darwin/linux)
-bun run check       # Type check and run tests (same command as CI)
+bun run check       # Lint, type check, and run tests (same command as CI)
+bun run lint        # Biome lint; warnings fail the command
+bun run format      # Opt-in Biome formatting
 ```
 
 ## Agent skills
@@ -77,6 +79,7 @@ Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agen
 
 ## Notes
 
+- `biome.json` owns lint rules and formatter settings for TypeScript/TSX and root JSON files; targeted suppressions explain intentional exceptions
 - `bun test` covers CLI, server, and pure UI helpers; CI runs `bun run check` on Linux and macOS, plus smoke tests
 - GitHub Gist sharing requires `GITHUB_TOKEN` env var
 - Opened Markdown source files are read-only: there is no `PUT /api/file` route

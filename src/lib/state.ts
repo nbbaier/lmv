@@ -28,7 +28,7 @@ async function readState(): Promise<StateData> {
 
 async function writeState(state: StateData): Promise<void> {
 	await mkdir(getDataDir(), { recursive: true });
-	await Bun.write(getStatePath(), JSON.stringify(state, null, "\t") + "\n");
+	await Bun.write(getStatePath(), `${JSON.stringify(state, null, "\t")}\n`);
 }
 
 export async function getLastDocument(cwd: string): Promise<string | null> {

@@ -125,6 +125,7 @@ export function TableOfContents({
 		};
 	}, [headings, scrollContainerRef]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: activeId changes which link owns activeRailLinkRef; scroll that link into view.
 	useEffect(() => {
 		const rail = railRef.current;
 		const link = activeRailLinkRef.current;
