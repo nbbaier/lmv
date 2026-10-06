@@ -81,5 +81,5 @@ Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agen
 - GitHub Gist sharing requires `GITHUB_TOKEN` env var
 - Opened Markdown source files are read-only: there is no `PUT /api/file` route
 - `module` field in package.json points to the CLI entry (atypical)
-- `docs/multi-file.md` is the spec for the multi-file/sidebar feature
+- For multi-file behavior, APIs, implementation ownership, and historical design changes, read `docs/multi-file.md`
 - `docs/demo.md` is a markdown feature demo file for manually testing the viewer
