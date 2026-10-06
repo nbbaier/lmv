@@ -15,7 +15,7 @@ existing coverage; use browser checks for UI behavior.
 | Sidebar tree, sorting, filtering, keyboard navigation | `src/lib/file-tree.ts` → `src/components/sidebar.tsx` → selection/search state in `src/app.tsx` | `src/lib/file-tree.test.ts`; browser keyboard/mobile checks |
 | Code highlighting | `src/lib/syntax-highlighting.ts` (`rehypeHighlight`, bundled grammars) → `src/app.tsx` renderer | `src/lib/syntax-highlighting.test.ts` |
 | TOC headings, IDs, active section | `src/lib/table-of-contents.ts` → `src/components/toc.tsx`; heading renderer in `src/app.tsx` uses the same slug helper | `src/lib/table-of-contents.test.ts`; browser scroll/link checks |
-| Focus mode | `src/lib/focus-mode.ts` → keyboard handling and shell visibility in `src/app.tsx` | `src/lib/focus-mode.test.ts`; browser focus checks |
+| Focus mode | `src/lib/focus-mode.ts` → keyboard/state handling and class application in `src/app.tsx` → `.focus-mode` visibility/layout rules in `src/index.html` | `src/lib/focus-mode.test.ts`; browser focus/layout checks |
 | Last document persistence | `src/lib/state.ts` → `/api/last-document` in `src/server.ts` → startup/selection effects in `src/app.tsx` | Manually reopen the same directory; no direct persistence tests |
 | Watch/reload/refresh | watchers, `rescan`, `/api/watch` in `src/server.ts` → `EventSource` handlers in `src/app.tsx` | `src/server.test.ts` covers refresh allowlist; browser checks for watch events/reload |
 | Markdown appearance, theme, shell layout | `docs/agents/styling.md` maps CSS and component ownership | Browser with `docs/demo.md` |
