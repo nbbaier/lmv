@@ -9,7 +9,7 @@ lmv/
 ├── src/
 │   ├── cli.ts          # CLI entry (parses args, spawns server)
 │   ├── server.ts       # Bun.serve() backend + API routes
-│   ├── index.html      # HTML entry (loads Tailwind + highlight.js via CDN)
+│   ├── index.html      # HTML entry, active CSS, Tailwind CDN, highlight theme CSS
 │   ├── main.tsx        # React root mount
 │   ├── app.tsx         # Main UI (largest file)
 │   ├── components/     # shadcn/ui pattern (button, sidebar, toc, frontmatter, tooltip)
@@ -25,6 +25,8 @@ lmv/
 | CLI args/help | `src/cli.ts`       | port, --no-open                |
 | API routes    | `src/server.ts`    | GET /api/file, /api/files, /api/share |
 | UI logic      | `src/app.tsx`      | viewing, theme, gist sharing   |
+| Markdown appearance | `src/index.html` | `.markdown-content` rules; see `docs/agents/styling.md` |
+| Shell layout | `src/app.tsx`, `src/components/` | Tailwind classes; shared `.document-*` rules in `src/index.html` |
 | Add component | `src/components/`  | cva + Radix pattern            |
 | File tree/discovery | `src/lib/`   | sidebar data layer             |
 | Build binary  | `scripts/build.ts` | darwin/linux targets           |
@@ -43,7 +45,7 @@ Use Bun exclusively:
 ## Conventions
 
 - **Components**: shadcn/ui style — Radix primitives + cva variants, `cn()` (clsx + tailwind-merge) for class conflicts
-- **Styling**: Tailwind v4 via CDN in `index.html` (`src/styles.css` exists but is unused)
+- **Styling**: For CSS ownership, theme tokens, and dev/compiled rendering, read `docs/agents/styling.md`.
 - **Markdown**: react-markdown + remark-gfm + rehype-highlight; mermaid diagrams via `beautiful-mermaid` (SVG-only, dark-mode theme)
 - **Strict TS**: `noUncheckedIndexedAccess: true` — index access returns `T | undefined`
 
