@@ -142,13 +142,9 @@ Routes live in [src/server.ts](../src/server.ts):
 | `GET /api/last-document` | Return the last document for this working directory if it is still valid, or null |
 | `PUT /api/last-document` | Persist the document as the last document, if it is in the file set |
 | `GET /api/watch` | SSE change and pending-refresh notifications |
-| `GET /api/share` | Report whether Gist sharing is configured |
-| `POST /api/share` | Share the currently loaded content and filename as a Gist |
 
 LMV does not modify opened Markdown source files. `PUT /api/file` returns 404;
 editing/save controls and stale `lmv-autosave` preferences are absent or ignored.
-Gist sharing requires `GITHUB_TOKEN` and sends the content currently loaded by the
-app; it does not reread the source at share time.
 
 ## Implementation ownership and checks
 
@@ -183,5 +179,5 @@ The original request to retain deleted files applies only before a refresh;
 refresh currently removes them. These notes record design evolution and do not
 instruct agents to reintroduce old requirements.
 
-File creation/deletion/renaming, source editing, multi-file Gist sharing, document
+File creation/deletion/renaming, source editing, document
 content search, tabs, and split views remain outside the implemented feature.

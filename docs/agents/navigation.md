@@ -22,14 +22,12 @@ when multiple files are needed, then open the printed URL.
 - Checks: the CLI tests above; `src/server.test.ts` covers refresh; manually
   check option-specific discovery.
 
-## File API, file set, and Gist sharing
+## File API and file set
 
 - Path: `src/server.ts` routes → fetch handlers in `src/app.tsx`
 - Opened Markdown source files are read-only: there is no `PUT /api/file`
   route. Adding editing reopens `docs/adr/0001-read-only-viewer.md`.
-- Gist sharing requires the `GITHUB_TOKEN` environment variable.
-- Checks: `src/server.test.ts` covers the file API; sharing needs manual
-  verification.
+- Checks: `src/server.test.ts` covers the file API.
 
 ## Sidebar tree, sorting, file filter, and keyboard navigation
 

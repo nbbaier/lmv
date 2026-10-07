@@ -2,7 +2,6 @@ import {
 	ChevronRight,
 	ExternalLink,
 	FileText,
-	Loader2,
 	Maximize2,
 	Minimize2,
 	MoreHorizontal,
@@ -10,7 +9,6 @@ import {
 	Moon,
 	PanelLeft,
 	Search,
-	Share2,
 	Sun,
 	X,
 } from "lucide-react";
@@ -267,8 +265,6 @@ export function App() {
 	const [pendingRefresh, setPendingRefresh] = useState(false);
 	const [content, setContent] = useState("");
 	const [filename, setFilename] = useState<string>("");
-	const [isSharing, setIsSharing] = useState(false);
-	const [shareConfigured, setShareConfigured] = useState(false);
 	const [focusMode, setFocusMode] = useState(false);
 	const [focusAnnouncement, setFocusAnnouncement] = useState("");
 	const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -383,13 +379,6 @@ export function App() {
 					}
 				},
 			)
-			.catch(console.error);
-
-		fetch("/api/share")
-			.then((res) => res.json())
-			.then((data: { configured: boolean }) => {
-				setShareConfigured(data.configured);
-			})
 			.catch(console.error);
 	}, [addToast]);
 
@@ -654,56 +643,6 @@ export function App() {
 		};
 	}, [mobileActionsOpen]);
 
-	const handleShare = useCallback(async () => {
-		if (!shareConfigured) {
-			addToast({
-				type: "error",
-				message: "Set GITHUB_TOKEN env var to enable sharing",
-			});
-			return;
-		}
-
-		setIsSharing(true);
-		try {
-			const res = await fetch("/api/share", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					content,
-					filename,
-					public: true,
-				}),
-			});
-
-			const data = await res.json();
-
-			if (!res.ok) {
-				addToast({
-					type: "error",
-					message: data.error || "Failed to create gist",
-				});
-				return;
-			}
-
-			await navigator.clipboard.writeText(data.url);
-			addToast({
-				type: "success",
-				message: "Gist created! URL copied to clipboard",
-				action: {
-					label: "Open",
-					onClick: () => window.open(data.url, "_blank"),
-				},
-			});
-		} catch (_err) {
-			addToast({
-				type: "error",
-				message: "Failed to create gist",
-			});
-		} finally {
-			setIsSharing(false);
-		}
-	}, [shareConfigured, content, filename, addToast]);
-
 	const cycleTheme = () => {
 		const next: Record<Theme, Theme> = {
 			system: "light",
@@ -900,25 +839,6 @@ export function App() {
 											type="button"
 											variant="ghost"
 											size="icon"
-											onClick={handleShare}
-											disabled={isSharing || !selectedPath}
-											aria-label="Share as GitHub Gist"
-											className="h-8 w-8 text-muted-foreground hover:text-foreground"
-										>
-											{isSharing ? <Loader2 className="animate-spin" /> : <Share2 />}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>
-										{shareConfigured ? "Share as GitHub Gist" : "GITHUB_TOKEN not set"}
-									</TooltipContent>
-								</Tooltip>
-
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
 											onClick={cycleTheme}
 											aria-label={`Cycle theme; current theme is ${theme}`}
 											className="h-8 w-8 text-muted-foreground hover:text-foreground"
@@ -965,20 +885,6 @@ export function App() {
 											<Maximize2 />
 											Focus mode
 											<kbd className="ml-auto font-mono text-[10px] text-muted-foreground">F</kbd>
-										</Button>
-										<Button
-											type="button"
-											variant="ghost"
-											onClick={() => {
-												setMobileActionsOpen(false);
-												handleShare();
-											}}
-											disabled={isSharing || !selectedPath}
-											role="menuitem"
-											className="h-9 w-full justify-start px-2.5 text-xs font-normal"
-										>
-											{isSharing ? <Loader2 className="animate-spin" /> : <Share2 />}
-											Share as GitHub Gist
 										</Button>
 										<Button
 											type="button"

@@ -32,7 +32,6 @@ describe("CLI process behavior", () => {
 			expect(result.stderr).toBe("");
 			expect(result.stdout).toContain("Usage:");
 			expect(result.stdout).toContain("Options:");
-			expect(result.stdout).toContain("Environment:");
 			expect(result.stdout).toContain("Examples:");
 		});
 	}
