@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+gpui = "0.2"
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Vendored copies of `gpui` transitive dependencies that need local fixes. Drop
+# each patch once the upstream crate (or the `gpui` pin that pulls it) moves on.
+[patch.crates-io]
+# Linux only (cloud sessions): `gpui` pulls `zed-async-tar`, which pins
+# `xattr 0.2.3`; that release references `libc::ENOATTR`, which current `libc`
+# no longer exports on Linux. The vendored copy maps it to `ENODATA` and swaps
+# the deprecated `libc::uint32_t` for `u32`.
+xattr = { path = "vendor/xattr-0.2.3" }
+# macOS: `block 0.1.6` declares `_NSConcreteStackBlock` with an uninhabited type,
+# a future-incompat lint. The vendored copy gives it a sized type.
+block = { path = "vendor/block-0.1.6" }
+# `proc-macro-error2 2.0.1` re-exports a private `proc_macro`, another
+# future-incompat lint. The vendored copy makes the extern crate `pub`.
+proc-macro-error2 = { path = "vendor/proc-macro-error2-2.0.1" }
+
+[profile.dev]
+# GPUI's dependency graph is large; keep debug builds usable.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

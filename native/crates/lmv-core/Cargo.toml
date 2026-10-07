@@ -1,0 +1,12 @@
+[package]
+name = "lmv-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Platform-independent pieces of the native lmv viewer: discovery, markdown model, theme tokens, CLI-to-app protocol"
+
+[dependencies]
+libc = "0.2"
+pulldown-cmark.workspace = true
+serde.workspace = true
+serde_json.workspace = true

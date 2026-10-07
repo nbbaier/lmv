@@ -87,3 +87,11 @@ when multiple files are needed, then open the printed URL.
 - Checks: `bun run build && ./dist/lmv --help && bun run smoke:binary` (the CI
   build job, which `bun run check` does not cover); browser checks for
   rendering
+
+## Native viewer exploration (GPUI)
+
+- Path: `docs/native-gpui.md` (design and porting map) → `native/`
+  (Rust workspace: `lmv-core`, `lmv-app`, `lmv-cli`)
+- The exploration shares no code with the browser app; the TypeScript gate
+  does not cover it.
+- Checks: `cd native && cargo test && cargo clippy --all-targets -- -D warnings`
