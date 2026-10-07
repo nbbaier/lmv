@@ -28,8 +28,8 @@ pub fn resolve_inputs(cwd: &Path, inputs: &[String]) -> Result<Vec<PathBuf>, Str
 
     let mut files: Vec<PathBuf> = Vec::new();
     for input in inputs {
-        let path = cwd.join(input);
-        let path = path
+        let requested = cwd.join(input);
+        let path = requested
             .canonicalize()
             .map_err(|_| format!("Input not found: {input}"))?;
 
@@ -43,7 +43,9 @@ pub fn resolve_inputs(cwd: &Path, inputs: &[String]) -> Result<Vec<PathBuf>, Str
             children.sort();
             files.extend(children);
         } else if path.is_file() {
-            if !is_markdown_file(&path) {
+            // Judge the name the user gave, not the symlink target, so
+            // `alias.md -> notes` opens just as a directory scan would list it.
+            if !is_markdown_file(&requested) {
                 return Err(format!("Not a Markdown file: {input}"));
             }
             files.push(path);
@@ -91,6 +93,26 @@ mod tests {
     fn rejects_missing_inputs() {
         let error = resolve_inputs(Path::new("."), &["does-not-exist.md".into()]).unwrap_err();
         assert_eq!(error, "Input not found: does-not-exist.md");
+    }
+
+    #[test]
+    fn judges_markdown_by_the_supplied_name_not_the_symlink_target() {
+        let dir = std::env::temp_dir().join(format!("lmv-core-symlink-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("notes"), "# extensionless").unwrap();
+        std::os::unix::fs::symlink(dir.join("notes"), dir.join("alias.md")).unwrap();
+
+        let direct = resolve_inputs(&dir, &["alias.md".into()]).unwrap();
+        assert_eq!(direct, vec![dir.join("notes").canonicalize().unwrap()]);
+
+        // A scan lists the alias by its own name, which is what the sidebar shows.
+        let scanned = resolve_inputs(&dir, &[".".into()]).unwrap();
+        assert_eq!(scanned, vec![dir.canonicalize().unwrap().join("alias.md")]);
+
+        let error = resolve_inputs(&dir, &["notes".into()]).unwrap_err();
+        assert_eq!(error, "Not a Markdown file: notes");
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

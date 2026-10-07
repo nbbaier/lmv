@@ -34,7 +34,7 @@ cargo build
 Environment:
 
 - `LMV_SOCKET` overrides the socket path (default `$XDG_RUNTIME_DIR/lmv.sock`
-  or `$TMPDIR/lmv-<user>.sock`).
+  or `~/.local/state/lmv/lmv.sock`; the lock file sits next to it).
 - `LMV_APP` points the CLI at a specific `lmv-app` binary.
 
 ## Layout

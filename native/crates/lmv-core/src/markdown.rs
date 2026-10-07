@@ -98,21 +98,26 @@ impl Inlines {
 /// Split a leading YAML frontmatter block from the body. The spike does not
 /// display frontmatter; the browser shell renders it as a panel.
 pub fn split_frontmatter(source: &str) -> (Option<&str>, &str) {
-    let rest = source
-        .strip_prefix("---\n")
-        .or_else(|| source.strip_prefix("---\r\n"));
-    let Some(rest) = rest else {
+    // Walk line by line so the first closing fence wins whatever newline
+    // style each line uses; searching for "\n---\n" first would skip a CRLF
+    // fence and swallow real content up to a later horizontal rule.
+    let is_fence = |line: &str| line.trim_end_matches(['\r', '\n']) == "---";
+    let mut lines = source.split_inclusive('\n');
+    let Some(first) = lines.next() else {
         return (None, source);
     };
-    for terminator in ["\n---\n", "\n---\r\n", "\n---"] {
-        if let Some(index) = rest.find(terminator) {
-            let frontmatter = &rest[..index];
-            let body = &rest[index + terminator.len()..];
-            if terminator == "\n---" && !body.is_empty() {
-                continue;
-            }
+    if !first.ends_with('\n') || !is_fence(first) {
+        return (None, source);
+    }
+    let start = first.len();
+    let mut offset = start;
+    for line in lines {
+        if is_fence(line) {
+            let frontmatter = source[start..offset].trim_end_matches(['\r', '\n']);
+            let body = &source[offset + line.len()..];
             return (Some(frontmatter), body);
         }
+        offset += line.len();
     }
     (None, source)
 }
@@ -437,6 +442,19 @@ mod tests {
         assert_eq!(frontmatter, Some("title: x"));
         assert_eq!(body, "# Hi\n");
         assert_eq!(split_frontmatter("# Hi\n"), (None, "# Hi\n"));
+    }
+
+    #[test]
+    fn frontmatter_closes_at_the_first_fence_whatever_the_newline_style() {
+        let mixed = "---\r\ntitle: x\r\n---\r\n# Keep me\n\n---\nTail\n";
+        let (frontmatter, body) = split_frontmatter(mixed);
+        assert_eq!(frontmatter, Some("title: x"));
+        assert_eq!(body, "# Keep me\n\n---\nTail\n");
+
+        let unterminated = "---\ntitle: x\nno closing fence\n";
+        assert_eq!(split_frontmatter(unterminated), (None, unterminated));
+        assert_eq!(split_frontmatter("---"), (None, "---"));
+        assert_eq!(split_frontmatter("---\n---\nbody"), (Some(""), "body"));
     }
 
     #[test]

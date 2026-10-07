@@ -45,9 +45,13 @@ native/
 
 ### Process model and CLI handoff
 
-- `lmv-app` is the long-lived viewer. On start it binds a Unix domain socket
-  (`$XDG_RUNTIME_DIR/lmv.sock`, else `$TMPDIR/lmv-<user>.sock`, override
-  with `LMV_SOCKET`) and opens a window for any files given as arguments.
+- `lmv-app` is the long-lived viewer. On start it takes an advisory lock
+  on `lmv.lock`, binds the Unix domain socket next to it
+  (`$XDG_RUNTIME_DIR/lmv.sock`, else `~/.local/state/lmv/lmv.sock` in a
+  mode-0700 directory, override with `LMV_SOCKET`), and opens a window for
+  any files given as arguments. A second app that loses the lock forwards
+  its files to the owner and exits. Each peer is served on its own thread
+  with a five-second timeout and a one-megabyte request limit.
 - `lmv <inputs>` resolves inputs into the file set, then sends one JSON line
   (`{cwd, files}`) over the socket and reads one reply. If nothing listens
   it launches `lmv-app` (sibling binary, `LMV_APP` override, or `PATH`)

@@ -55,18 +55,27 @@ fn open_viewer_window(viewer: Entity<Viewer>, cx: &mut App) {
 /// Another viewer owns the socket: give it our files and exit, so there is
 /// never a second window that the CLI cannot reach.
 fn defer_to_running_viewer() -> ! {
-    match ipc::send_open(&initial_request()) {
-        Ok(reply) if reply.ok => std::process::exit(0),
-        Ok(reply) => {
-            eprintln!(
-                "lmv-app: the running viewer rejected the request: {}",
-                reply.error.unwrap_or_default()
-            );
-            std::process::exit(1);
-        }
-        Err(error) => {
-            eprintln!("lmv-app: another viewer owns the socket but did not answer: {error}");
-            std::process::exit(1);
+    let request = initial_request();
+    // The owner may hold the lock but not have bound its socket yet.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match ipc::send_open(&request) {
+            Ok(reply) if reply.ok => std::process::exit(0),
+            Ok(reply) => {
+                eprintln!(
+                    "lmv-app: the running viewer rejected the request: {}",
+                    reply.error.unwrap_or_default()
+                );
+                std::process::exit(1);
+            }
+            Err(error) if std::time::Instant::now() < deadline => {
+                let _ = error;
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(error) => {
+                eprintln!("lmv-app: another viewer owns the socket but did not answer: {error}");
+                std::process::exit(1);
+            }
         }
     }
 }

@@ -2972,6 +2972,7 @@ dependencies = [
 name = "lmv-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "pulldown-cmark",
  "serde",
  "serde_json",
