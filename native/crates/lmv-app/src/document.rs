@@ -161,8 +161,11 @@ fn render_code_block(code: &str) -> AnyElement {
             }
         })
         .collect();
+    // Scroll state is keyed by id, so each block needs its own. The code
+    // string's heap address is unique per block and stable while the
+    // document stays loaded.
     div()
-        .id("code-block")
+        .id(("code-block", code.as_ptr() as usize))
         .my(px(BODY_PX * 1.5))
         .px(px(18.0))
         .py(px(14.0))
