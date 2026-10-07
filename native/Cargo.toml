@@ -20,6 +20,12 @@ serde_json = "1"
 [patch.crates-io]
 xattr = { path = "vendor/xattr-0.2.3" }
 
+# macOS: `block 0.1.6` declares `_NSConcreteStackBlock` with an uninhabited type,
+# and `proc-macro-error2 2.0.1` re-exports a private `proc_macro`; both trip
+# future-incompat lints (pulled in by gpui). The vendored copies fix those.
+block = { path = "vendor/block-0.1.6" }
+proc-macro-error2 = { path = "vendor/proc-macro-error2-2.0.1" }
+
 [profile.dev]
 # GPUI's dependency graph is large; keep debug builds usable.
 opt-level = 1
