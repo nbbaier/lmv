@@ -22,16 +22,12 @@ Options:
   --hidden                Include hidden files/folders (directory inputs only)
   --ignored               Include files ignored by git
 
-Environment:
-  GITHUB_TOKEN            Enable "Share as Gist" feature
-
 Examples:
   lmv README.md
   lmv docs/guide.md -p 8080
   lmv docs/ --recursive
   lmv README.md docs/guide.md
   lmv 'docs/**/*.md'
-  GITHUB_TOKEN=ghp_xxx lmv README.md
 `);
 }
 

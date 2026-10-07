@@ -53,7 +53,5 @@ a writer or reviewer has to apply it. Configuration lives in `biome.json` and
 Existing technical debt. Reviewers should treat these as known, not as new
 findings, unless a diff touches them.
 
-- `src/server.ts` `POST /api/share` handler: `as` assertions on the request
-  body and on the Gist API response.
 - `src/server.test.ts` fixture setup writes files with `node:fs/promises`
   `writeFile` instead of `Bun.write`.

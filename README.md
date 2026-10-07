@@ -1,6 +1,6 @@
 # lmv - Local Markdown Viewer
 
-View local markdown files in your browser with syntax highlighting, dark mode, and GitHub Gist sharing.
+View local markdown files in your browser with syntax highlighting and dark mode.
 
 ## Installation
 
@@ -43,7 +43,6 @@ lmv README.md --no-open
 - **Dark/Light/System theme** toggle
 - **Focus mode** for distraction-free reading (`F`, then `F` or `Escape` to exit)
 - **Read-only source handling** — LMV never modifies opened Markdown source files
-- **Share as GitHub Gist** (requires `GITHUB_TOKEN`)
 
 ## Keyboard Shortcuts
 
@@ -69,19 +68,7 @@ Markdown editor, dirty indicator, Save button, autosave preference, and the
 Existing `lmv-autosave` localStorage values are ignored.
 
 “Read-only” here means LMV does not modify the opened Markdown source files. LMV
-still stores UI preferences and the last selected document, and Gist sharing still
-sends the currently loaded disk content to GitHub when configured.
-
-## GitHub Gist Sharing
-
-To enable the share feature, set your GitHub token:
-
-```bash
-export GITHUB_TOKEN=ghp_your_token_here
-lmv README.md
-```
-
-The token needs the `gist` scope. [Create a token here](https://github.com/settings/tokens/new?scopes=gist).
+still stores UI preferences and the last selected document.
 
 ## License
 
