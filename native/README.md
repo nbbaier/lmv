@@ -12,12 +12,11 @@ cargo test             # unit tests plus the CLI handoff tests
 cargo clippy --all-targets -- -D warnings
 ```
 
-macOS needs Xcode command-line tools for Metal. Linux needs Vulkan,
-fontconfig, xkbcommon, and X11 or Wayland development libraries (on
-Ubuntu: `libxkbcommon-dev libxkbcommon-x11-dev` on top of the usual
-`libfontconfig-dev libxcb*-dev libwayland-dev libvulkan-dev`). The
-workspace patches `xattr` (see `Cargo.toml`) so gpui builds against
-current `libc`.
+Target platform is macOS; it needs only Xcode command-line tools. The
+workspace still compiles on Linux so cloud sessions can run the checks:
+that needs `libxkbcommon-dev libxkbcommon-x11-dev` plus the usual
+fontconfig, xcb, wayland and vulkan dev packages, and the `xattr` patch in
+`Cargo.toml` (a no-op on macOS).
 
 ## Run
 

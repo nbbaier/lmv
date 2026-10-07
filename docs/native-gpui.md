@@ -1,7 +1,9 @@
 # Exploration: a native lmv on GPUI
 
 Status: exploration, not a decision. The spike lives in `native/`; nothing in
-the TypeScript app changed. Reopening this as a roadmap item means turning the
+the TypeScript app changed. Target platform is macOS only: the owner is the
+main user and uses a Mac. Linux is kept compiling solely so cloud sessions
+(which run Linux) can type-check and test the Rust code. Reopening this as a roadmap item means turning the
 "Milestones" section into issues.
 
 ## The question
@@ -38,7 +40,7 @@ native/
   crates/lmv-app    the GPUI window (binary `lmv-app`)
   crates/lmv-cli    the `lmv` command
   assets/fonts      IBM Plex Sans + JetBrains Mono (OFL), embedded at build time
-  vendor/xattr      one-line patch so gpui builds on current libc (see Build)
+  vendor/xattr      one-line patch so gpui builds on Linux cloud sessions (see Build)
 ```
 
 ### Process model and CLI handoff
@@ -98,26 +100,22 @@ Facts checked against gpui 0.2.2 sources during the spike.
 | System appearance | `window.appearance()` and `observe_window_appearance` |
 | Accessibility | Minimal. No equivalent of the ARIA tree, live region, or `inert` the browser shell uses |
 | Text selection | Not built in for rendered text. Zed implements selection in its own `markdown` crate, which is not published |
-| Platforms | macOS (Metal) is primary; Linux (Vulkan via blade, X11 and Wayland); Windows experimental |
+| Platforms | macOS (Metal) is GPUI's primary target, which matches the scope here |
 
 ## Build facts
 
 - `gpui` is published (0.2.2 on crates.io, Apache-2.0). It is pre-1.0 and
   the API moved between 0.1 and 0.2 (for example `spawn` now takes async
   closures). Expect churn.
-- On Linux with current `libc`, `gpui` fails to build because its tar
-  dependency pins `xattr 0.2.3`, which references a removed constant. The
-  workspace patches `xattr` from `native/vendor`. Drop the patch when gpui
-  moves on.
-- Linux needs Vulkan, fontconfig, xkbcommon, and X11 or Wayland libraries at
-  build and run time. The cloud container was missing only the xkbcommon
-  development packages (`libxkbcommon-dev libxkbcommon-x11-dev`); with those
-  the workspace links. Under Xvfb with Mesa's software Vulkan driver the
-  app starts, binds its socket, and accepts a CLI handoff (`lmv README.md`
-  against the running process printed "Opened 1 file(s) in the running
-  viewer"), but the X root stays black; GPUI's own `hello_world` example
-  behaves the same there, so this is the headless setup, not the spike.
-  No screenshot exists yet.
+- macOS needs only Xcode command-line tools (Metal). No patches apply there.
+- Linux matters only for cloud sessions. There, `gpui` fails to build with
+  current `libc` because its tar dependency pins `xattr 0.2.3`, which
+  references a removed constant; the workspace patches `xattr` from
+  `native/vendor` (a no-op on macOS). The container also needed
+  `libxkbcommon-dev libxkbcommon-x11-dev` to link. Under Xvfb the app
+  starts, binds its socket, and accepts a CLI handoff, but nothing is drawn;
+  GPUI's own `hello_world` behaves the same, so screenshots have to come
+  from the Mac.
 - macOS was not available in this session. The window has not been seen.
   Treat the pixel measurements as a starting point to tune against the
   browser shell side by side.
@@ -141,7 +139,7 @@ app would do less than the browser shell without extra work.
 | Sidebar tree, sort, cursor | `file-tree.ts`, `TreeRow`, `aria-activedescendant` | `uniform_list` of rows, cursor as index, actions for arrows/Home/End/Enter | medium | keyboard parity is work; accessibility regression |
 | File filter | `<input>` in the top bar | custom text input element or `gpui-component` | medium | the single biggest UI gap in GPUI |
 | Sidebar resize | pointer drag, keyboard step | `on_drag` plus mouse move; persist fraction | small | none |
-| Drawer (narrow) | overlay under 768px | window-width breakpoint with an overlay layer | small | desktop only, so maybe drop |
+| Drawer (narrow) | overlay under 768px | drop; a desktop window just gets a minimum width | none | none |
 | Code highlighting | lowlight + highlight.js `github-dark` | `syntect` with a converted theme, or tree-sitter via Zed's crates | medium | grammar coverage differs from the bundled highlight.js set |
 | TOC and active section | `table-of-contents.ts`, scroll listener | headings from the block tree; `ScrollHandle` and element bounds for the active section | medium | sticky rail needs manual layout |
 | Focus mode | class toggle, CSS transitions | state flag plus `with_animation` | small | none |
@@ -155,7 +153,7 @@ app would do less than the browser shell without extra work.
 | Mermaid | `beautiful-mermaid` in the browser | no Rust renderer; options are shelling to `mmdc` and showing the PNG with `img()`, or a webview just for diagrams | large | likely stays "shown as code" |
 | Tooltips and toasts | Radix tooltip, toast list | `.tooltip()`, overlay with timers | small | none |
 | Text selection and copy | browser default | custom selection over `TextLayout`, per element | large | regression until built |
-| Binary build and install | `bun build --compile`, Homebrew formula | `cargo build --release`, macOS `.app` bundle, codesign and notarize for Gatekeeper, Homebrew cask | medium | distribution is a new workstream |
+| Binary build and install | `bun build --compile`, Homebrew formula | `cargo build --release`, a `.app` bundle with `Info.plist` and icon so Finder, Dock and `open -a lmv` work; ad-hoc codesign is enough for a personal install | small | none for a single user |
 
 ## The spike
 
@@ -189,6 +187,7 @@ selection, or a macOS bundle.
    with a side-by-side screenshot review against the browser shell.
 2. **Navigation parity**: sidebar tree with keyboard cursor, sort, resize,
    file filter input, Cmd/Ctrl+B and Cmd/Ctrl+K, last document.
-3. **Native fit and finish**: text selection and copy, macOS bundle, Dock
-   icon, `open -a`, signing, Homebrew cask, Linux desktop file.
+3. **Native fit and finish**: text selection and copy, `.app` bundle, Dock
+   icon, `open -a`, a `build:cp`-style install script into `~/.local/bin`
+   and `/Applications`.
 4. **Decide the browser version's fate** and update the ADR set either way.
