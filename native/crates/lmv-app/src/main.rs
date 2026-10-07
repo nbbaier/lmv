@@ -10,9 +10,8 @@ mod fonts;
 mod viewer;
 
 use gpui::{
-    prelude::*,
-    actions, px, size, App, Application, Bounds, Entity, KeyBinding, TitlebarOptions, WindowBounds,
-    WindowOptions,
+    actions, prelude::*, px, size, App, Application, Bounds, Entity, KeyBinding, TitlebarOptions,
+    WindowBounds, WindowOptions,
 };
 use lmv_core::ipc::{self, OpenRequest};
 use std::path::PathBuf;
@@ -27,7 +26,13 @@ fn initial_request() -> OpenRequest {
     let files: Vec<PathBuf> = std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
-        .map(|path| if path.is_absolute() { path } else { cwd.join(path) })
+        .map(|path| {
+            if path.is_absolute() {
+                path
+            } else {
+                cwd.join(path)
+            }
+        })
         .collect();
     OpenRequest { cwd, files }
 }
@@ -47,12 +52,32 @@ fn open_viewer_window(viewer: Entity<Viewer>, cx: &mut App) {
     }
 }
 
+/// Another viewer owns the socket: give it our files and exit, so there is
+/// never a second window that the CLI cannot reach.
+fn defer_to_running_viewer() -> ! {
+    match ipc::send_open(&initial_request()) {
+        Ok(reply) if reply.ok => std::process::exit(0),
+        Ok(reply) => {
+            eprintln!(
+                "lmv-app: the running viewer rejected the request: {}",
+                reply.error.unwrap_or_default()
+            );
+            std::process::exit(1);
+        }
+        Err(error) => {
+            eprintln!("lmv-app: another viewer owns the socket but did not answer: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let (tx, rx) = mpsc::channel::<OpenRequest>();
     match ipc::serve(move |request| {
         let _ = tx.send(request);
     }) {
         Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => defer_to_running_viewer(),
         Err(error) => eprintln!("lmv-app: not listening for the CLI: {error}"),
     }
 
@@ -74,7 +99,10 @@ fn main() {
             while let Ok(request) = rx.try_recv() {
                 let viewer = viewer.clone();
                 let _ = cx.update(|cx| {
-                    viewer.update(cx, |viewer, cx| viewer.open(request, cx));
+                    // An empty file set only brings the viewer forward.
+                    if !request.files.is_empty() {
+                        viewer.update(cx, |viewer, cx| viewer.open(request, cx));
+                    }
                     if cx.windows().is_empty() {
                         open_viewer_window(viewer, cx);
                     }

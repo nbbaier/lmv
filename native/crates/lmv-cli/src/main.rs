@@ -96,15 +96,24 @@ fn main() {
     // A running app takes the file set directly.
     if let Ok(reply) = ipc::send_open(&request) {
         if reply.ok {
-            println!("Opened {} file(s) in the running viewer", request.files.len());
+            println!(
+                "Opened {} file(s) in the running viewer",
+                request.files.len()
+            );
             return;
         }
-        eprintln!("lmv: the viewer rejected the request: {}", reply.error.unwrap_or_default());
+        eprintln!(
+            "lmv: the viewer rejected the request: {}",
+            reply.error.unwrap_or_default()
+        );
         std::process::exit(1);
     }
 
     if !args.launch {
-        eprintln!("lmv: no viewer is running (socket {})", ipc::socket_path().display());
+        eprintln!(
+            "lmv: no viewer is running (socket {})",
+            ipc::socket_path().display()
+        );
         std::process::exit(1);
     }
 

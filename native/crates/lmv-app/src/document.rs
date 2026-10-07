@@ -20,21 +20,33 @@ struct BaseStyle {
     italic: bool,
 }
 
+impl BaseStyle {
+    fn body(theme: &Theme) -> Self {
+        BaseStyle {
+            color: theme.foreground.hsla(),
+            weight: FontWeight::NORMAL,
+            italic: false,
+        }
+    }
+}
+
 pub fn render_blocks(blocks: &[Block], theme: &Theme) -> Vec<AnyElement> {
+    render_blocks_with(blocks, theme, BaseStyle::body(theme))
+}
+
+/// `StyledText` runs set every character's color and style explicitly, so
+/// a parent's `text_color` or `italic()` never reaches them. Containers that
+/// restyle their text (blockquotes) therefore pass the style down as `base`.
+fn render_blocks_with(blocks: &[Block], theme: &Theme, base: BaseStyle) -> Vec<AnyElement> {
     blocks
         .iter()
-        .map(|block| render_block(block, theme))
+        .map(|block| render_block(block, theme, base))
         .collect()
 }
 
-fn render_block(block: &Block, theme: &Theme) -> AnyElement {
-    let base = BaseStyle {
-        color: theme.foreground.hsla(),
-        weight: FontWeight::NORMAL,
-        italic: false,
-    };
+fn render_block(block: &Block, theme: &Theme, base: BaseStyle) -> AnyElement {
     match block {
-        Block::Heading { level, inlines } => render_heading(*level, inlines, theme),
+        Block::Heading { level, inlines } => render_heading(*level, inlines, theme, base),
         Block::Paragraph(inlines) => div()
             .my(px(BODY_PX))
             .child(render_inlines(inlines, theme, base))
@@ -47,12 +59,18 @@ fn render_block(block: &Block, theme: &Theme) -> AnyElement {
             .border_l_2()
             .border_color(theme.link.hsla())
             .bg(theme.muted.with_alpha(0.35))
-            .text_color(theme.muted_foreground.hsla())
-            .italic()
-            .children(render_blocks(blocks, theme))
+            .children(render_blocks_with(
+                blocks,
+                theme,
+                BaseStyle {
+                    color: theme.muted_foreground.hsla(),
+                    weight: FontWeight::NORMAL,
+                    italic: true,
+                },
+            ))
             .into_any_element(),
-        Block::List { start, items } => render_list(*start, items, theme),
-        Block::Table { header, rows } => render_table(header, rows, theme),
+        Block::List { start, items } => render_list(*start, items, theme, base),
+        Block::Table { header, rows } => render_table(header, rows, theme, base),
         Block::Rule => div()
             .my(px(BODY_PX * 2.5))
             .mx_auto()
@@ -70,7 +88,7 @@ fn render_block(block: &Block, theme: &Theme) -> AnyElement {
     }
 }
 
-fn render_heading(level: u8, inlines: &Inlines, theme: &Theme) -> AnyElement {
+fn render_heading(level: u8, inlines: &Inlines, theme: &Theme, parent: BaseStyle) -> AnyElement {
     let (size, top, bottom) = match level {
         1 => (32.0, 0.0, 0.85),
         2 => (24.0, 2.1, 0.7),
@@ -83,10 +101,12 @@ fn render_heading(level: u8, inlines: &Inlines, theme: &Theme) -> AnyElement {
     } else {
         theme.foreground.hsla()
     };
+    // Headings set their own color even inside a blockquote, as the CSS does,
+    // but inherit the italic.
     let base = BaseStyle {
         color,
         weight: FontWeight::SEMIBOLD,
-        italic: false,
+        italic: parent.italic,
     };
     let inlines = if level == 6 {
         uppercase(inlines)
@@ -133,7 +153,13 @@ fn render_code_block(code: &str) -> AnyElement {
     // shell uses regardless of theme. Token colors wait on syntect.
     let lines: Vec<String> = code
         .split('\n')
-        .map(|line| if line.is_empty() { " ".to_string() } else { line.to_string() })
+        .map(|line| {
+            if line.is_empty() {
+                " ".to_string()
+            } else {
+                line.to_string()
+            }
+        })
         .collect();
     div()
         .id("code-block")
@@ -149,11 +175,20 @@ fn render_code_block(code: &str) -> AnyElement {
         .text_size(px(13.0))
         .line_height(relative(1.6))
         .overflow_x_scroll()
-        .children(lines.into_iter().map(|line| div().whitespace_nowrap().child(line)))
+        .children(
+            lines
+                .into_iter()
+                .map(|line| div().whitespace_nowrap().child(line)),
+        )
         .into_any_element()
 }
 
-fn render_list(start: Option<u64>, items: &[ListItem], theme: &Theme) -> AnyElement {
+fn render_list(
+    start: Option<u64>,
+    items: &[ListItem],
+    theme: &Theme,
+    base: BaseStyle,
+) -> AnyElement {
     let marker_color = theme.muted_foreground.hsla();
     let rows = items.iter().enumerate().map(|(index, item)| {
         let marker: AnyElement = match (item.checked, start) {
@@ -177,7 +212,11 @@ fn render_list(start: Option<u64>, items: &[ListItem], theme: &Theme) -> AnyElem
                     .justify_end()
                     .child(marker),
             )
-            .child(div().flex_1().min_w_0().children(render_blocks_tight(&item.blocks, theme)))
+            .child(div().flex_1().min_w_0().children(render_blocks_tight(
+                &item.blocks,
+                theme,
+                base,
+            )))
     });
     div()
         .my(px(BODY_PX))
@@ -188,12 +227,7 @@ fn render_list(start: Option<u64>, items: &[ListItem], theme: &Theme) -> AnyElem
 }
 
 /// Inside list items the browser shell collapses paragraph margins to 0.35em.
-fn render_blocks_tight(blocks: &[Block], theme: &Theme) -> Vec<AnyElement> {
-    let base = BaseStyle {
-        color: theme.foreground.hsla(),
-        weight: FontWeight::NORMAL,
-        italic: false,
-    };
+fn render_blocks_tight(blocks: &[Block], theme: &Theme, base: BaseStyle) -> Vec<AnyElement> {
     blocks
         .iter()
         .map(|block| match block {
@@ -203,9 +237,9 @@ fn render_blocks_tight(blocks: &[Block], theme: &Theme) -> Vec<AnyElement> {
                 .into_any_element(),
             Block::List { start, items } => div()
                 .my(px(BODY_PX * 0.35))
-                .child(render_list(*start, items, theme))
+                .child(render_list(*start, items, theme, base))
                 .into_any_element(),
-            other => render_block(other, theme),
+            other => render_block(other, theme, base),
         })
         .collect()
 }
@@ -235,18 +269,21 @@ fn render_checkbox(checked: bool, theme: &Theme) -> AnyElement {
     boxed.into_any_element()
 }
 
-fn render_table(header: &[Inlines], rows: &[Vec<Inlines>], theme: &Theme) -> AnyElement {
+fn render_table(
+    header: &[Inlines],
+    rows: &[Vec<Inlines>],
+    theme: &Theme,
+    base: BaseStyle,
+) -> AnyElement {
     let header_base = BaseStyle {
         color: theme.muted_foreground.hsla(),
         weight: FontWeight::SEMIBOLD,
-        italic: false,
+        italic: base.italic,
     };
-    let body_base = BaseStyle {
-        color: theme.foreground.hsla(),
-        weight: FontWeight::NORMAL,
-        italic: false,
-    };
-    let columns = header.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    let body_base = base;
+    let columns = header
+        .len()
+        .max(rows.iter().map(Vec::len).max().unwrap_or(0));
 
     let header_row = div()
         .flex()

@@ -13,12 +13,24 @@ pub struct Document {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Block {
-    Heading { level: u8, inlines: Inlines },
+    Heading {
+        level: u8,
+        inlines: Inlines,
+    },
     Paragraph(Inlines),
-    CodeBlock { language: Option<String>, code: String },
+    CodeBlock {
+        language: Option<String>,
+        code: String,
+    },
     BlockQuote(Vec<Block>),
-    List { start: Option<u64>, items: Vec<ListItem> },
-    Table { header: Vec<Inlines>, rows: Vec<Vec<Inlines>> },
+    List {
+        start: Option<u64>,
+        items: Vec<ListItem>,
+    },
+    Table {
+        header: Vec<Inlines>,
+        rows: Vec<Vec<Inlines>>,
+    },
     Rule,
     Html(String),
 }
@@ -65,7 +77,10 @@ impl Inlines {
         let end = self.text.len();
         match self.runs.last_mut() {
             Some(last) if last.style == style && last.range.end == start => last.range.end = end,
-            _ => self.runs.push(Run { range: start..end, style }),
+            _ => self.runs.push(Run {
+                range: start..end,
+                style,
+            }),
         }
     }
 
@@ -83,7 +98,9 @@ impl Inlines {
 /// Split a leading YAML frontmatter block from the body. The spike does not
 /// display frontmatter; the browser shell renders it as a panel.
 pub fn split_frontmatter(source: &str) -> (Option<&str>, &str) {
-    let rest = source.strip_prefix("---\n").or_else(|| source.strip_prefix("---\r\n"));
+    let rest = source
+        .strip_prefix("---\n")
+        .or_else(|| source.strip_prefix("---\r\n"));
     let Some(rest) = rest else {
         return (None, source);
     };
@@ -104,7 +121,8 @@ pub fn split_frontmatter(source: &str) -> (Option<&str>, &str) {
 /// `remark-gfm`: tables, strikethrough, and task lists.
 pub fn parse(source: &str) -> Document {
     let (_, body) = split_frontmatter(source);
-    let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    let options =
+        Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut builder = Builder::default();
     for event in Parser::new_ext(body, options) {
         builder.event(event);
@@ -423,17 +441,60 @@ mod tests {
 
     #[test]
     fn flattens_inline_styles_into_runs() {
-        let doc = parse("Here's **bold**, *italic*, ~~gone~~ and `code` with a [link](https://x.y).");
+        let doc =
+            parse("Here's **bold**, *italic*, ~~gone~~ and `code` with a [link](https://x.y).");
         let Block::Paragraph(inlines) = &doc.blocks[0] else {
             panic!("expected a paragraph");
         };
         let styles = runs(inlines);
         assert_eq!(styles[0].0, "Here's ");
-        assert_eq!(styles[1], ("bold", InlineStyle { bold: true, ..Default::default() }));
-        assert_eq!(styles[3], ("italic", InlineStyle { italic: true, ..Default::default() }));
-        assert_eq!(styles[5].1, InlineStyle { strikethrough: true, ..Default::default() });
-        assert_eq!(styles[7], ("code", InlineStyle { code: true, ..Default::default() }));
-        assert_eq!(styles[9], ("link", InlineStyle { link: Some(0), ..Default::default() }));
+        assert_eq!(
+            styles[1],
+            (
+                "bold",
+                InlineStyle {
+                    bold: true,
+                    ..Default::default()
+                }
+            )
+        );
+        assert_eq!(
+            styles[3],
+            (
+                "italic",
+                InlineStyle {
+                    italic: true,
+                    ..Default::default()
+                }
+            )
+        );
+        assert_eq!(
+            styles[5].1,
+            InlineStyle {
+                strikethrough: true,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            styles[7],
+            (
+                "code",
+                InlineStyle {
+                    code: true,
+                    ..Default::default()
+                }
+            )
+        );
+        assert_eq!(
+            styles[9],
+            (
+                "link",
+                InlineStyle {
+                    link: Some(0),
+                    ..Default::default()
+                }
+            )
+        );
         assert_eq!(inlines.links, vec!["https://x.y"]);
         let covered: usize = inlines.runs.iter().map(|run| run.range.len()).sum();
         assert_eq!(covered, inlines.text.len());
@@ -448,7 +509,10 @@ mod tests {
         assert_eq!(*start, None);
         assert_eq!(items[0].checked, Some(true));
         assert_eq!(items[1].checked, Some(false));
-        assert_eq!(items[0].blocks, vec![Block::Paragraph(Inlines::plain("done"))]);
+        assert_eq!(
+            items[0].blocks,
+            vec![Block::Paragraph(Inlines::plain("done"))]
+        );
         assert!(matches!(items[1].blocks[1], Block::List { .. }));
     }
 
@@ -457,7 +521,10 @@ mod tests {
         let doc = parse("```rust\nfn main() {}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n");
         assert_eq!(
             doc.blocks[0],
-            Block::CodeBlock { language: Some("rust".into()), code: "fn main() {}".into() }
+            Block::CodeBlock {
+                language: Some("rust".into()),
+                code: "fn main() {}".into()
+            }
         );
         let Block::Table { header, rows } = &doc.blocks[1] else {
             panic!("expected a table");
@@ -482,7 +549,10 @@ mod tests {
         let demo = include_str!("../../../../docs/demo.md");
         let doc = parse(demo);
         assert!(doc.blocks.len() > 20);
-        assert!(doc.blocks.iter().any(|block| matches!(block, Block::Table { .. })));
+        assert!(doc
+            .blocks
+            .iter()
+            .any(|block| matches!(block, Block::Table { .. })));
         assert!(doc
             .blocks
             .iter()

@@ -29,7 +29,11 @@ fn hands_the_file_set_to_a_listening_app() {
         .env("LMV_SOCKET", &socket)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("Opened 2 file(s)"));
 
     let request = rx.recv().unwrap();
@@ -77,7 +81,10 @@ fn reports_bad_inputs_and_options() {
     assert_eq!(unknown.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("Unknown option '--port'"));
 
-    let help = Command::new(env!("CARGO_BIN_EXE_lmv")).arg("--help").output().unwrap();
+    let help = Command::new(env!("CARGO_BIN_EXE_lmv"))
+        .arg("--help")
+        .output()
+        .unwrap();
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("Usage: lmv"));
 }

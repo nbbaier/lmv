@@ -120,7 +120,11 @@ impl Viewer {
                             .min_w_0()
                             .truncate()
                             .text_size(px(12.0))
-                            .font_weight(if has_file { FontWeight::MEDIUM } else { FontWeight::NORMAL })
+                            .font_weight(if has_file {
+                                FontWeight::MEDIUM
+                            } else {
+                                FontWeight::NORMAL
+                            })
                             .text_color(if has_file {
                                 theme.foreground.hsla()
                             } else {
@@ -140,7 +144,10 @@ impl Viewer {
                     .text_size(px(12.0))
                     .text_color(theme.muted_foreground.hsla())
                     .cursor_pointer()
-                    .hover(|this| this.bg(theme.accent.hsla()).text_color(theme.foreground.hsla()))
+                    .hover(|this| {
+                        this.bg(theme.accent.hsla())
+                            .text_color(theme.foreground.hsla())
+                    })
                     .on_click(cx.listener(|this, _, _, cx| this.cycle_theme(cx)))
                     .child(format!("Theme: {}", self.theme_mode.label())),
             )

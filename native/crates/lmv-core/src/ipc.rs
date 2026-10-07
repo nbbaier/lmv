@@ -10,7 +10,9 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::thread::JoinHandle;
 
-/// Ask a running app to show these files. Paths are absolute.
+/// Ask a running app to show these files. Paths are absolute. An empty
+/// `files` only activates the app (a second `lmv-app` launched with no
+/// arguments sends that), it never clears the current file set.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenRequest {
     /// Working directory of the CLI, used as the key for the last document.
@@ -83,7 +85,10 @@ pub fn serve(handler: impl Fn(OpenRequest) + Send + 'static) -> std::io::Result<
             let reply = match serde_json::from_str::<OpenRequest>(line.trim_end()) {
                 Ok(request) => {
                     handler(request);
-                    OpenReply { ok: true, error: None }
+                    OpenReply {
+                        ok: true,
+                        error: None,
+                    }
                 }
                 Err(error) => OpenReply {
                     ok: false,
