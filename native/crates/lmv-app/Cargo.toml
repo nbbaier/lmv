@@ -1,0 +1,14 @@
+[package]
+name = "lmv-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native lmv viewer window built on GPUI"
+
+[[bin]]
+name = "lmv-app"
+path = "src/main.rs"
+
+[dependencies]
+gpui.workspace = true
+lmv-core = { path = "../lmv-core" }

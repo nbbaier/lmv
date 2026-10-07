@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+gpui = "0.2"
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# `gpui` pulls `zed-async-tar`, which pins `xattr 0.2.3`; that release references
+# `libc::ENOATTR`, which current `libc` no longer exports on Linux. The vendored
+# copy maps it to `ENODATA`. Drop this patch once gpui's tar dependency moves on.
+[patch.crates-io]
+xattr = { path = "vendor/xattr-0.2.3" }
+
+[profile.dev]
+# GPUI's dependency graph is large; keep debug builds usable.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

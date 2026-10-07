@@ -1,0 +1,13 @@
+[package]
+name = "lmv-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Command line entry for the native lmv viewer: resolves inputs and hands them to the running app"
+
+[[bin]]
+name = "lmv"
+path = "src/main.rs"
+
+[dependencies]
+lmv-core = { path = "../lmv-core" }
