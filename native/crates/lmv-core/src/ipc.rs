@@ -11,9 +11,10 @@
 //! hands its files to the winner.
 
 use serde::{Deserialize, Serialize};
-use std::fs::File;
+use std::ffi::OsString;
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -43,31 +44,69 @@ pub struct OpenReply {
     pub error: Option<String>,
 }
 
+struct SocketLocation {
+    path: PathBuf,
+    /// True when `lmv` owns the socket's immediate parent directory (`.../lmv`)
+    /// and should enforce mode 0700 on it. False for caller-supplied
+    /// `LMV_SOCKET` overrides so `lmv` never chmods a shared directory.
+    owned_parent: bool,
+}
+
+fn non_empty(value: Option<OsString>) -> Option<OsString> {
+    value.filter(|v| !v.is_empty())
+}
+
+fn resolve_socket_location(
+    lmv_socket: Option<OsString>,
+    xdg_runtime_dir: Option<OsString>,
+    home: Option<OsString>,
+) -> std::io::Result<SocketLocation> {
+    if let Some(path) = non_empty(lmv_socket) {
+        return Ok(SocketLocation {
+            path: PathBuf::from(path),
+            owned_parent: false,
+        });
+    }
+    if let Some(runtime_dir) = non_empty(xdg_runtime_dir) {
+        return Ok(SocketLocation {
+            path: PathBuf::from(runtime_dir).join("lmv").join("lmv.sock"),
+            owned_parent: true,
+        });
+    }
+    if let Some(home) = non_empty(home) {
+        return Ok(SocketLocation {
+            path: PathBuf::from(home)
+                .join(".local")
+                .join("state")
+                .join("lmv")
+                .join("lmv.sock"),
+            owned_parent: true,
+        });
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "cannot determine socket path: set LMV_SOCKET, XDG_RUNTIME_DIR, or HOME",
+    ))
+}
+
 /// Where the app listens. `LMV_SOCKET` overrides it, which the tests and
 /// multiple side-by-side builds rely on. Otherwise the socket lives in a
-/// directory only this user can enter: `$XDG_RUNTIME_DIR`, else
-/// `~/.local/state/lmv` (created with mode 0700). A shared temporary
-/// directory is never used, so no other local user can plant a listener.
-pub fn socket_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("LMV_SOCKET") {
-        return PathBuf::from(path);
-    }
-    if let Some(runtime_dir) = std::env::var_os("XDG_RUNTIME_DIR") {
-        return PathBuf::from(runtime_dir).join("lmv.sock");
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home)
-            .join(".local")
-            .join("state")
-            .join("lmv")
-            .join("lmv.sock");
-    }
-    std::env::temp_dir().join(format!("lmv-{}.sock", std::process::id()))
+/// dedicated `lmv` subdirectory only this user can enter:
+/// `$XDG_RUNTIME_DIR/lmv/lmv.sock`, else `~/.local/state/lmv/lmv.sock`
+/// (created with mode 0700). A shared temporary directory is never used; if
+/// none of those environment variables are set, this returns an error.
+pub fn socket_path() -> std::io::Result<PathBuf> {
+    resolve_socket_location(
+        std::env::var_os("LMV_SOCKET"),
+        std::env::var_os("XDG_RUNTIME_DIR"),
+        std::env::var_os("HOME"),
+    )
+    .map(|location| location.path)
 }
 
 /// Client side: deliver one request to the app listening on the default path.
 pub fn send_open(request: &OpenRequest) -> std::io::Result<OpenReply> {
-    send_open_to(&socket_path(), request)
+    send_open_to(&socket_path()?, request)
 }
 
 /// Client side: deliver one request to the app listening on `path`.
@@ -91,7 +130,35 @@ pub fn send_open_to(path: &Path, request: &OpenRequest) -> std::io::Result<OpenR
 pub fn serve(
     handler: impl Fn(OpenRequest) + Send + Sync + 'static,
 ) -> std::io::Result<JoinHandle<()>> {
-    serve_at(&socket_path(), handler)
+    let location = resolve_socket_location(
+        std::env::var_os("LMV_SOCKET"),
+        std::env::var_os("XDG_RUNTIME_DIR"),
+        std::env::var_os("HOME"),
+    )?;
+    serve_with_location(&location, handler)
+}
+
+fn serve_with_location(
+    location: &SocketLocation,
+    handler: impl Fn(OpenRequest) + Send + Sync + 'static,
+) -> std::io::Result<JoinHandle<()>> {
+    if location.owned_parent {
+        if let Some(parent) = location.path.parent() {
+            std::fs::create_dir_all(parent)?;
+            let metadata = std::fs::symlink_metadata(parent)?;
+            if !metadata.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "socket directory {} is not a real directory",
+                        parent.display()
+                    ),
+                ));
+            }
+            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    serve_at(&location.path, handler)
 }
 
 /// Server side: take ownership of `path` and hand each request to `handler`
@@ -101,15 +168,21 @@ pub fn serve_at(
     handler: impl Fn(OpenRequest) + Send + Sync + 'static,
 ) -> std::io::Result<JoinHandle<()>> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-        if std::env::var_os("LMV_SOCKET").is_none() {
-            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))?;
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
         }
     }
 
     // The lock decides ownership; the socket file is only ever touched by
     // the holder, so a stale file can be removed without racing a live app.
-    let lock = File::create(lock_path(path))?;
+    // Open without truncation or following symlinks so a pre-planted lock
+    // symlink cannot clobber another file.
+    let lock = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(lock_path(path))?;
     if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AddrInUse,
@@ -257,17 +330,81 @@ mod tests {
 
     #[test]
     fn default_path_never_falls_into_a_shared_temp_dir() {
-        // With the override unset the path is under the runtime dir or HOME,
-        // both private to the user.
-        if std::env::var_os("LMV_SOCKET").is_some() {
-            return;
-        }
-        let path = socket_path();
-        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        assert!(
-            runtime.map(|dir| path.starts_with(dir)).unwrap_or(false)
-                || home.map(|dir| path.starts_with(dir)).unwrap_or(false)
+        let override_loc =
+            resolve_socket_location(Some(OsString::from("/custom/lmv.sock")), None, None).unwrap();
+        assert_eq!(override_loc.path, PathBuf::from("/custom/lmv.sock"));
+        assert!(!override_loc.owned_parent);
+
+        let runtime_loc =
+            resolve_socket_location(None, Some(OsString::from("/run/user/1000")), None).unwrap();
+        assert_eq!(runtime_loc.path, PathBuf::from("/run/user/1000/lmv/lmv.sock"));
+        assert!(runtime_loc.owned_parent);
+
+        let home_loc =
+            resolve_socket_location(None, None, Some(OsString::from("/Users/alice"))).unwrap();
+        assert_eq!(
+            home_loc.path,
+            PathBuf::from("/Users/alice/.local/state/lmv/lmv.sock")
         );
+        assert!(home_loc.owned_parent);
+
+        let missing = resolve_socket_location(None, None, None);
+        assert!(missing.is_err());
+        assert_eq!(
+            missing.err().unwrap().kind(),
+            std::io::ErrorKind::NotFound
+        );
+
+        let empty = resolve_socket_location(
+            Some(OsString::new()),
+            Some(OsString::new()),
+            Some(OsString::new()),
+        );
+        assert!(empty.is_err());
+    }
+
+    #[test]
+    fn owned_socket_dir_is_chmodded_but_unowned_parent_is_left_alone() {
+        let base = std::env::temp_dir().join(format!("lmv-ipc-perms-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let owned = SocketLocation {
+            path: base.join("lmv").join("lmv.sock"),
+            owned_parent: true,
+        };
+        let _server = serve_with_location(&owned, |_| {}).unwrap();
+        let lmv_mode = std::fs::metadata(base.join("lmv"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        let base_mode = std::fs::metadata(&base).unwrap().permissions().mode() & 0o777;
+        assert_eq!(lmv_mode, 0o700);
+        assert_eq!(base_mode, 0o755);
+
+        let unowned = SocketLocation {
+            path: base.join("direct.sock"),
+            owned_parent: false,
+        };
+        let _server2 = serve_with_location(&unowned, |_| {}).unwrap();
+        let base_mode_after = std::fs::metadata(&base).unwrap().permissions().mode() & 0o777;
+        assert_eq!(base_mode_after, 0o755);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn refuses_a_symlink_at_the_lock_path() {
+        let socket = scratch_socket("symlink-lock");
+        let lock = lock_path(&socket);
+        let target = socket.parent().unwrap().join("victim.txt");
+        std::fs::write(&target, "precious").unwrap();
+        let _ = std::fs::remove_file(&lock);
+        std::os::unix::fs::symlink(&target, &lock).unwrap();
+
+        assert!(serve_at(&socket, |_| {}).is_err());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "precious");
     }
 }

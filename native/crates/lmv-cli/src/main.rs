@@ -92,9 +92,16 @@ fn main() {
         }
     };
     let request = OpenRequest { cwd, files };
+    let socket = match ipc::socket_path() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("lmv: {error}");
+            std::process::exit(1);
+        }
+    };
 
     // A running app takes the file set directly.
-    if let Ok(reply) = ipc::send_open(&request) {
+    if let Ok(reply) = ipc::send_open_to(&socket, &request) {
         if reply.ok {
             println!(
                 "Opened {} file(s) in the running viewer",
@@ -110,10 +117,7 @@ fn main() {
     }
 
     if !args.launch {
-        eprintln!(
-            "lmv: no viewer is running (socket {})",
-            ipc::socket_path().display()
-        );
+        eprintln!("lmv: no viewer is running (socket {})", socket.display());
         std::process::exit(1);
     }
 
@@ -126,7 +130,7 @@ fn main() {
     // confirms it came up so a failed launch is reported here, not silently.
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
-        if std::os::unix::net::UnixStream::connect(ipc::socket_path()).is_ok() {
+        if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
             println!("Launched the viewer with {} file(s)", request.files.len());
             return;
         }

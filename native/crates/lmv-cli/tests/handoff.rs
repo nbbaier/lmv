@@ -66,6 +66,25 @@ fn fails_clearly_without_a_running_app() {
 }
 
 #[test]
+fn fails_clearly_when_no_socket_environment_is_set() {
+    let dir = scratch_dir("no-env");
+    std::fs::write(dir.join("a.md"), "# A").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_lmv"))
+        .args(["a.md"])
+        .current_dir(&dir)
+        .env_remove("LMV_SOCKET")
+        .env_remove("XDG_RUNTIME_DIR")
+        .env_remove("HOME")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot determine socket path"));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn reports_bad_inputs_and_options() {
     let missing = Command::new(env!("CARGO_BIN_EXE_lmv"))
         .args(["nope.md"])

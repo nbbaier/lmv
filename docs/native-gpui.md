@@ -47,7 +47,7 @@ native/
 
 - `lmv-app` is the long-lived viewer. On start it takes an advisory lock
   on `lmv.lock`, binds the Unix domain socket next to it
-  (`$XDG_RUNTIME_DIR/lmv.sock`, else `~/.local/state/lmv/lmv.sock` in a
+  (`$XDG_RUNTIME_DIR/lmv/lmv.sock`, else `~/.local/state/lmv/lmv.sock` in a
   mode-0700 directory, override with `LMV_SOCKET`), and opens a window for
   any files given as arguments. A second app that loses the lock forwards
   its files to the owner and exits. Each peer is served on its own thread

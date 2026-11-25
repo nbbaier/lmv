@@ -101,7 +101,7 @@ pub fn split_frontmatter(source: &str) -> (Option<&str>, &str) {
     // Walk line by line so the first closing fence wins whatever newline
     // style each line uses; searching for "\n---\n" first would skip a CRLF
     // fence and swallow real content up to a later horizontal rule.
-    let is_fence = |line: &str| line.trim_end_matches(['\r', '\n']) == "---";
+    let is_fence = |line: &str| line.trim_end_matches(['\r', '\n', ' ', '\t']) == "---";
     let mut lines = source.split_inclusive('\n');
     let Some(first) = lines.next() else {
         return (None, source);
@@ -114,12 +114,149 @@ pub fn split_frontmatter(source: &str) -> (Option<&str>, &str) {
     for line in lines {
         if is_fence(line) {
             let frontmatter = source[start..offset].trim_end_matches(['\r', '\n']);
+            if !is_yaml_mapping(frontmatter) {
+                return (None, source);
+            }
             let body = &source[offset + line.len()..];
             return (Some(frontmatter), body);
         }
         offset += line.len();
     }
     (None, source)
+}
+
+/// Check that a candidate frontmatter block is a non-empty YAML mapping,
+/// matching the browser shell's `parseFrontmatter` (which rejects empty
+/// blocks, scalars, sequences, and ordinary Markdown prose between opening
+/// horizontal rules).
+fn is_yaml_mapping(block: &str) -> bool {
+    let mut has_entry = false;
+    let mut allows_unindented_seq = false;
+
+    for raw_line in block.lines() {
+        let line = raw_line.trim_end_matches('\r');
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        if line.starts_with([' ', '\t']) {
+            if !has_entry {
+                return false;
+            }
+            continue;
+        }
+        if line == "-" || line.starts_with("- ") || line.starts_with("-\t") {
+            if !allows_unindented_seq {
+                return false;
+            }
+            continue;
+        }
+        let Some(value) = parse_yaml_mapping_value(line) else {
+            return false;
+        };
+        has_entry = true;
+        allows_unindented_seq = value.is_empty() || value.starts_with('#');
+    }
+
+    has_entry
+}
+
+/// Parse a top-level YAML mapping line (`key: value` or `key:`) and return the
+/// trimmed value after the separating colon.
+fn parse_yaml_mapping_value(line: &str) -> Option<&str> {
+    let bytes = line.as_bytes();
+    let after_key = match *bytes.first()? {
+        b'"' => {
+            let mut i = 1;
+            let mut escaped = false;
+            let mut closed = None;
+            while i < bytes.len() {
+                if escaped {
+                    escaped = false;
+                } else if bytes[i] == b'\\' {
+                    escaped = true;
+                } else if bytes[i] == b'"' {
+                    closed = Some(i + 1);
+                    break;
+                }
+                i += 1;
+            }
+            &line[closed?..]
+        }
+        b'\'' => {
+            let mut i = 1;
+            let mut closed = None;
+            while i < bytes.len() {
+                if bytes[i] == b'\'' {
+                    if bytes.get(i + 1) == Some(&b'\'') {
+                        i += 2;
+                        continue;
+                    }
+                    closed = Some(i + 1);
+                    break;
+                }
+                i += 1;
+            }
+            &line[closed?..]
+        }
+        first => {
+            // Reject YAML indicator characters that cannot start an unquoted
+            // plain mapping key (also rejects Markdown headings, blockquotes,
+            // emphasis, code spans, links, and flow collections).
+            if matches!(
+                first,
+                b',' | b'['
+                    | b']'
+                    | b'{'
+                    | b'}'
+                    | b'#'
+                    | b'&'
+                    | b'*'
+                    | b'!'
+                    | b'|'
+                    | b'>'
+                    | b'%'
+                    | b'@'
+                    | b'`'
+                    | b':'
+                    | b'?'
+            ) {
+                return None;
+            }
+            let colon = find_plain_key_colon(line)?;
+            let key = line[..colon].trim_end_matches([' ', '\t']);
+            if key.is_empty() {
+                return None;
+            }
+            return Some(line[colon + 1..].trim());
+        }
+    };
+
+    let after_space = after_key.trim_start_matches([' ', '\t']);
+    let rest = after_space.strip_prefix(':')?;
+    if !rest.is_empty() && !rest.starts_with([' ', '\t']) {
+        return None;
+    }
+    Some(rest.trim())
+}
+
+fn find_plain_key_colon(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    for (i, &byte) in bytes.iter().enumerate() {
+        if matches!(byte, b'[' | b']' | b'{' | b'}') {
+            return None;
+        }
+        // An unquoted ` #` starts a YAML comment, so any later colon is inside it.
+        if byte == b'#' && i > 0 && matches!(bytes[i - 1], b' ' | b'\t') {
+            return None;
+        }
+        if byte == b':' {
+            let next = bytes.get(i + 1).copied();
+            if next.is_none() || matches!(next, Some(b' ' | b'\t')) {
+                return Some(i);
+            }
+        }
+    }
+    None
 }
 
 /// Parse Markdown with the GFM extensions the browser shell enables through
@@ -235,10 +372,16 @@ impl Builder {
                 self.inline_mut().push(&text, style);
             }
             Event::InlineHtml(text) => self.push_text(&text),
-            Event::Html(text) => self.push_block(Block::Html(text.trim_end().to_string())),
+            Event::Html(text) => {
+                self.flush_implicit_paragraph();
+                self.push_block(Block::Html(text.trim_end().to_string()));
+            }
             Event::SoftBreak => self.push_text(" "),
             Event::HardBreak => self.push_text("\n"),
-            Event::Rule => self.push_block(Block::Rule),
+            Event::Rule => {
+                self.flush_implicit_paragraph();
+                self.push_block(Block::Rule);
+            }
             Event::TaskListMarker(checked) => {
                 if let Some(slot) = self.item_checked.last_mut() {
                     *slot = Some(checked);
@@ -454,7 +597,54 @@ mod tests {
         let unterminated = "---\ntitle: x\nno closing fence\n";
         assert_eq!(split_frontmatter(unterminated), (None, unterminated));
         assert_eq!(split_frontmatter("---"), (None, "---"));
-        assert_eq!(split_frontmatter("---\n---\nbody"), (Some(""), "body"));
+        let empty = "---\n---\nbody";
+        assert_eq!(split_frontmatter(empty), (None, empty));
+    }
+
+    #[test]
+    fn keeps_ordinary_markdown_between_opening_horizontal_rules() {
+        let prose = "---\nKeep this paragraph.\n\n---\nTail\n";
+        assert_eq!(split_frontmatter(prose), (None, prose));
+
+        let doc = parse(prose);
+        assert!(doc.blocks.iter().any(|block| matches!(
+            block,
+            Block::Paragraph(inlines) if inlines.text == "Keep this paragraph."
+        )));
+
+        let sequence = "---\n- one\n- two\n---\nTail\n";
+        assert_eq!(split_frontmatter(sequence), (None, sequence));
+
+        let url_line = "---\nSee https://example.com\n---\nTail\n";
+        assert_eq!(split_frontmatter(url_line), (None, url_line));
+
+        let heading = "---\n# Title: intro\n---\nTail\n";
+        assert_eq!(split_frontmatter(heading), (None, heading));
+
+        let bold_note = "---\n**Note**: keep me\n---\nTail\n";
+        assert_eq!(split_frontmatter(bold_note), (None, bold_note));
+
+        let with_list_and_multiline =
+            "---\ntitle: Demo\ntags:\n- rust\n- gpui\ndescription: |\n  Line one\n  Line two\n\"a:b\": 1\n---\nBody\n";
+        let (frontmatter, body) = split_frontmatter(with_list_and_multiline);
+        assert!(frontmatter.is_some());
+        assert_eq!(body, "Body\n");
+    }
+
+    #[test]
+    fn preserves_order_around_a_rule_in_a_tight_list() {
+        let doc = parse("- before\n  ***\n  after\n");
+        let Block::List { items, .. } = &doc.blocks[0] else {
+            panic!("expected a list");
+        };
+        assert_eq!(
+            items[0].blocks,
+            vec![
+                Block::Paragraph(Inlines::plain("before")),
+                Block::Rule,
+                Block::Paragraph(Inlines::plain("after")),
+            ]
+        );
     }
 
     #[test]
