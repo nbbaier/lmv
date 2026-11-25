@@ -12,6 +12,16 @@ const DEFAULT_CONFIG: Omit<CliConfig, "inputs"> = {
 describe("parseCliArgs", () => {
 	const inputCases = [
 		{
+			name: "no arguments (defaults to current directory)",
+			args: [],
+			inputs: ["."],
+		},
+		{
+			name: "option terminator without inputs (defaults to current directory)",
+			args: ["--"],
+			inputs: ["."],
+		},
+		{
 			name: "single file",
 			args: ["README.md"],
 			inputs: ["README.md"],
@@ -97,6 +107,17 @@ describe("parseCliArgs", () => {
 		expect(parseCliArgs(["docs/", "--recursive"]).recursive).toBe(true);
 	});
 
+	test("defaults to current directory when only options are provided", () => {
+		expect(parseCliArgs(["--recursive", "--no-open", "-p", "8080"])).toEqual({
+			inputs: ["."],
+			port: 8080,
+			autoOpen: false,
+			recursive: true,
+			includeHidden: false,
+			includeIgnored: false,
+		});
+	});
+
 	const invalidCases = [
 		{
 			name: "missing port value",
@@ -137,11 +158,6 @@ describe("parseCliArgs", () => {
 			name: "unknown option",
 			args: ["README.md", "--unknown"],
 			message: "Unknown option '--unknown'",
-		},
-		{
-			name: "options without inputs",
-			args: ["--recursive"],
-			message: "No inputs specified",
 		},
 	] as const;
 

@@ -8,6 +8,7 @@ function printHelp() {
 lmv - Local Markdown Viewer
 
 Usage:
+  lmv                                   Discover .md files in current directory
   lmv <file.md>                         Open a markdown file
   lmv <file1.md> <file2.md> ...         Open multiple markdown files
   lmv <dir>                             Discover .md files in a directory
@@ -23,6 +24,7 @@ Options:
   --ignored               Include files ignored by git
 
 Examples:
+  lmv
   lmv README.md
   lmv docs/guide.md -p 8080
   lmv docs/ --recursive
@@ -33,10 +35,6 @@ Examples:
 
 async function main() {
 	const rawArgs = process.argv.slice(2);
-	if (rawArgs.length === 0) {
-		printHelp();
-		process.exit(0);
-	}
 
 	const terminatorIndex = rawArgs.indexOf("--");
 	const flagArgs = terminatorIndex === -1 ? rawArgs : rawArgs.slice(0, terminatorIndex);

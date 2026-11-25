@@ -7,9 +7,10 @@ requirements. Use the implementation and check pointers here or in
 
 ## Inputs and discovery
 
-Files, directories, and quoted glob patterns can be combined:
+Files, directories, and quoted glob patterns can be combined; omitting inputs defaults to `.` (the current directory):
 
 ```bash
+lmv
 lmv README.md docs/guide.md
 lmv docs/ --recursive
 lmv 'docs/**/*.md'

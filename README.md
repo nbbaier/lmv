@@ -26,6 +26,9 @@ bun run build
 ## Usage
 
 ```bash
+# Open markdown files in the current directory
+lmv
+
 # Open a markdown file
 lmv README.md
 

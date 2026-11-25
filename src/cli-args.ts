@@ -47,10 +47,7 @@ function parseRawArgs(rawArgs: readonly string[]) {
 
 export function parseCliArgs(rawArgs: readonly string[]): CliConfig {
 	const parsed = parseRawArgs(rawArgs);
-
-	if (parsed.positionals.length === 0) {
-		throw new Error("No inputs specified");
-	}
+	const inputs = parsed.positionals.length > 0 ? parsed.positionals : ["."];
 
 	const portValue = parsed.values.port;
 	let port = 3000;
@@ -69,7 +66,7 @@ export function parseCliArgs(rawArgs: readonly string[]): CliConfig {
 	}
 
 	return {
-		inputs: parsed.positionals,
+		inputs,
 		port,
 		autoOpen: !parsed.values["no-open"],
 		recursive: parsed.values.recursive ?? false,
